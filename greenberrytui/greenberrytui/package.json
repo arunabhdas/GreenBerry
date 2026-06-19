@@ -9,7 +9,8 @@
 	},
 	"scripts": {
 		"build": "tsc",
-		"dev": "tsc --watch",
+		"dev": "tsx watch src/cli.tsx",
+		"examples": "tsx examples/gallery.tsx",
 		"test": "prettier --check . && xo && ava"
 	},
 	"files": [
