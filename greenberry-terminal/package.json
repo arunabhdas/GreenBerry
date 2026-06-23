@@ -1,0 +1,31 @@
+{
+	"name": "greenberry-terminal",
+	"version": "0.1.0",
+	"license": "MIT",
+	"description": "Bloomberg-style terminal for prediction-market traders (Kalshi / Polymarket) — markets, news & OSINT in one dense TUI.",
+	"bin": "dist/cli.js",
+	"type": "module",
+	"engines": {
+		"node": ">=16"
+	},
+	"scripts": {
+		"build": "tsc",
+		"start": "tsx src/cli.tsx",
+		"dev": "tsx watch src/cli.tsx",
+		"typecheck": "tsc --noEmit"
+	},
+	"files": [
+		"dist"
+	],
+	"dependencies": {
+		"ink": "^4.4.1",
+		"meow": "^11.0.0",
+		"react": "^18.3.1"
+	},
+	"devDependencies": {
+		"@types/node": "^25.9.3",
+		"@types/react": "^18.3.31",
+		"tsx": "^4.22.4",
+		"typescript": "^5.9.3"
+	}
+}
