@@ -1,6 +1,6 @@
 # ROADMAP-TUI — GreenBerry Terminal Database Client
 
-**App:** `greenberrytui/greenberrytui/` (Ink 4 + React 18 + TypeScript)
+**App:** `greenberry-frontend-tui/greenberrytui/` (Ink 4 + React 18 + TypeScript)
 **Vision:** A terminal database admin & table editor — pgAdmin's admin depth and Arctype's polish, delivered with k9s/lazygit ergonomics. The unclaimed lane in the current TUI landscape (pgcli/rainfrog/lazysql/harlequin) is the **admin lane**: safe staged editing with SQL preview, schema editing as forms that emit reviewable DDL, role management, backup orchestration, and live server ops. GreenBerry TUI claims it.
 **Engines (day one architecture):** PostgreSQL, MySQL/MariaDB, SQLite, SQL Server — behind a driver adapter interface. Postgres is the reference implementation and always lands features first.
 
@@ -20,7 +20,7 @@
 - **Introspection catalog** (`src/db/catalog/`): async, cached, per-engine queries against `pg_catalog` / `information_schema` / `sqlite_master` / `sys.*`; feeds tree, autocomplete, and object search.
 - **Staged-changes engine** (`src/sql/`): builds parameterized UPDATE/INSERT/DELETE and DDL from grid/form edits; renders SQL preview; applies in a transaction.
 - **UI kit** (`src/ui/`): fills the existing empty stubs — `DataTable`, `SelectableList`, `LineEditor` — plus `Tree`, `Palette`, `StatusBar`, `HelpOverlay`, `Tabs`.
-- **Existing assets:** `app.tsx` three-pane focus layout is the seed of the shell; `greenberry-terminal/` (prediction-markets app) is a styling/pattern reference only.
+- **Existing assets:** `app.tsx` three-pane focus layout is the seed of the shell; `greenberry-deprecated-terminal/` (prediction-markets app) is a styling/pattern reference only.
 
 ---
 
