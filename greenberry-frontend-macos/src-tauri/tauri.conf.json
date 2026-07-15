@@ -1,0 +1,54 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "GreenBerry",
+  "version": "0.1.0",
+  "identifier": "com.greenberry.desktop",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "GreenBerry",
+        "width": 1200,
+        "height": 800,
+        "minWidth": 900,
+        "minHeight": 600,
+        "center": true,
+        "resizable": true,
+        "theme": "Dark",
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "createUpdaterArtifacts": true,
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "macOS": {
+      "minimumSystemVersion": "11.0"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDhBQjVBM0VGMjU3MzdCNDMKUldSRGUzTWw3Nk8xaXFESGp5eWhENWpLSklNa1ZkTldVSzZCclZaeFRibVA2UDN6VzJJRTdpR2cK",
+      "endpoints": [
+        "https://releases.greenberry.app/{{target}}/{{arch}}/{{current_version}}"
+      ]
+    }
+  }
+}

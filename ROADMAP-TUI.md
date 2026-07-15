@@ -162,3 +162,21 @@ MySQL and SQL Server adapters land; the staged-writes differentiator ships with 
 - Plugin system, AI/NL-to-SQL, PL/pgSQL debugger, pgAgent scheduling, cloud-provisioning wizards.
 - Engines beyond the four (ClickHouse, Oracle, Mongo) — the adapter interface keeps the door open.
 - No shared code with `greenberry-frontend-macos` (explicit decision: independent apps).
+
+---
+
+## Addendum — 2026-07-09
+
+> Appended after the original E1–E9 plan; **supersedes** the affected story rather than revising it in place. Design rationale lives in `TECH-SPEC-TUI.md` → "Revision R1".
+
+### R — Persistence change: local SQLite app-db, OS keychain removed
+
+Supersedes the **OS-keychain half of S2.7** (credential handling).
+
+- ⬜ **R1 SQLite app-db layer** — A local SQLite application database (via the `better-sqlite3` driver already in the adapter set), at the app data dir (e.g. `~/.local/share/greenberry/greenberry.db`), as the single store for connection profiles (connection strings + metadata), saved queries, history, and **stored credentials**; schema-versioned. *AC: profiles incl. secrets persist across restart in one `.db` file.*
+- ⬜ **R2 S2.7 supersession** — Credential handling stores secrets in the app-db, **not** an OS keychain; the keychain path is removed. Still honor external `.pgpass`, `PG*`, pg service files, MySQL option files (read-only — the user's own config) and never put passwords on argv. *AC: connecting with only `.pgpass` still works; our stored secrets live in the app-db; no keychain dependency.*
+- ⬜ **R3 Secret-at-rest decision** — As in the GUI: decide/document the at-rest posture for secrets now in a local SQLite file (SQLCipher / app-managed key / accepted local-plaintext with rationale). *AC: recorded in the TUI docs/ADR.*
+
+### Integration & end-to-end (applies when E1–E4/E6 land)
+
+The TUI is not yet started, so its integration is inherent in building M1 — but the same discipline as the GUI's E10 applies: **M1/M2 are 🟢 only when the assembled TUI runs the full flow end-to-end** — connect → **persist to the SQLite app-db** → restart → **reconnect** → query — with an automated E2E test (ava + ink-testing-library driving the shell). *AC: an E2E covering persistence of connection strings via the local SQLite DB, not just per-module unit tests.*

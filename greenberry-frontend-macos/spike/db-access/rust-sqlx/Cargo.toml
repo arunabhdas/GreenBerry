@@ -1,0 +1,19 @@
+[package]
+name = "gb-spike-rust-sqlx"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+sqlx = { version = "0.8", default-features = false, features = [
+    "runtime-tokio-rustls",
+    "postgres",
+    "chrono",
+] }
+futures = "0.3"
+chrono = "0.4"
+anyhow = "1"
+
+[profile.release]
+# Representative of what we'd ship inside the Tauri binary.
+opt-level = 3

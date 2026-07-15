@@ -1,0 +1,49 @@
+/* GreenBerry design tokens (S1.4) — Arctype-inspired. Dark + light. */
+:root,
+[data-theme="dark"] {
+  --bg: #0e0f13;
+  --panel: #16171c;
+  --panel-2: #1b1c22;
+  --hover: #1e1f25;
+  --border: #26272e;
+  --text: #e6e7ea;
+  --dim: #8a8d96;
+  --pink: #ec4899;
+  --indigo: #5b6cf0;
+  --danger: #f04747;
+  --good: #35c37d;
+  --warn: #ffb000;
+  --selection: rgba(91, 108, 240, 0.35);
+  --on-accent: #ffffff;
+  color-scheme: dark;
+}
+
+[data-theme="light"] {
+  --bg: #ffffff;
+  --panel: #f6f7f9;
+  --panel-2: #eef0f3;
+  --hover: #e9ebef;
+  --border: #e1e3e8;
+  --text: #1b1d23;
+  --dim: #6b7280;
+  --pink: #db2777;
+  --indigo: #4f46e5;
+  --danger: #dc2626;
+  --good: #16a34a;
+  --warn: #b45309;
+  --selection: rgba(79, 70, 229, 0.22);
+  --on-accent: #ffffff;
+  color-scheme: light;
+}
+
+:root {
+  --radius: 6px;
+  --radius-lg: 10px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, system-ui,
+    sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+}

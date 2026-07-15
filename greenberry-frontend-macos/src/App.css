@@ -1,0 +1,123 @@
+/* App shell styles — consumes design tokens from src/ui/tokens.css. */
+:root {
+  --titlebar-h: 40px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.titlebar {
+  height: var(--titlebar-h);
+  flex: 0 0 var(--titlebar-h);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 var(--space-3) 0 82px; /* clear macOS traffic lights */
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+  user-select: none;
+}
+
+/* data-tauri-drag-region only fires when the mousedown target IS the header,
+   so let it show through the labels; buttons stay interactive. */
+.titlebar > * {
+  pointer-events: none;
+}
+.titlebar button,
+.titlebar a,
+.titlebar input,
+.titlebar select {
+  pointer-events: auto;
+}
+
+.titlebar .brand {
+  font-weight: 600;
+  letter-spacing: 0.2px;
+}
+
+.titlebar .sub {
+  color: var(--dim);
+  font-size: 0.85rem;
+}
+
+.shell {
+  flex: 1;
+  display: grid;
+  place-items: center;
+}
+
+.welcome {
+  text-align: center;
+}
+
+.mark {
+  font-size: 42px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  background: linear-gradient(90deg, var(--pink), var(--indigo));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.tagline {
+  color: var(--dim);
+  margin: 8px 0 20px;
+}
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.95rem;
+}
+
+.status .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--pink);
+  box-shadow: 0 0 8px var(--pink);
+}
+
+.meta {
+  color: var(--dim);
+  font-size: 0.8rem;
+  margin-top: 16px;
+}
+
+.next {
+  color: var(--dim);
+  font-size: 0.8rem;
+  margin-top: 4px;
+  opacity: 0.8;
+}
+
+.next code {
+  font-family: var(--font-mono);
+  background: var(--panel-2);
+  padding: 1px 5px;
+  border-radius: 4px;
+}

@@ -1,0 +1,10 @@
+{
+  "name": "gb-spike-node-sidecar",
+  "private": true,
+  "type": "module",
+  "description": "S1.2 spike: Node sidecar streaming a 1M-row Postgres result via pg + pg-query-stream.",
+  "dependencies": {
+    "pg": "^8.13.1",
+    "pg-query-stream": "^4.7.1"
+  }
+}

@@ -1,0 +1,5 @@
+# Spike build artifacts — keep only source + docs in the repo.
+node-sidecar/node_modules/
+node-sidecar/package-lock.json
+rust-sqlx/target/
+rust-sqlx/Cargo.lock

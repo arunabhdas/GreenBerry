@@ -1,0 +1,79 @@
+name: GreenBerry GUI CI
+
+on:
+  push:
+    paths: ["greenberry-frontend-macos/**", ".github/workflows/greenberry-gui-ci.yml"]
+  pull_request:
+    paths: ["greenberry-frontend-macos/**"]
+
+defaults:
+  run:
+    working-directory: greenberry-frontend-macos
+
+jobs:
+  frontend:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: greenberry-frontend-macos/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+  rust:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: gb
+          POSTGRES_PASSWORD: gb
+          POSTGRES_DB: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 10s
+          --health-timeout 5s --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Tauri system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev librsvg2-dev
+      - name: cargo test (unit + live-PG integration)
+        working-directory: greenberry-frontend-macos/src-tauri
+        env:
+          GB_TEST_PG_USER: gb
+          GB_TEST_PG_PASSWORD: gb
+          GB_TEST_PG_HOST: localhost
+        run: cargo test
+
+  # S9.2/S9.3: signed, notarized, updater-signed release build.
+  # Requires repo secrets (Apple cert + updater private key); skipped on forks.
+  release-build:
+    runs-on: macos-14
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [frontend, rust]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - uses: dtolnay/rust-toolchain@stable
+      - run: npm ci
+      - name: Build, sign, notarize, sign-update
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: npm run tauri build

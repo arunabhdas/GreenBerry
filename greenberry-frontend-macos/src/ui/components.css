@@ -1,0 +1,188 @@
+/* GreenBerry component styles (S1.4). Token-driven; theme-agnostic. */
+
+::selection {
+  background: var(--selection);
+}
+
+/* Button */
+.gb-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-family: var(--font-ui);
+  font-weight: 500;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel-2);
+  color: var(--text);
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+.gb-btn:hover {
+  background: var(--hover);
+}
+.gb-btn:focus-visible {
+  outline: 2px solid var(--indigo);
+  outline-offset: 1px;
+}
+.gb-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.gb-btn--sm {
+  padding: 3px 8px;
+  font-size: 0.85rem;
+}
+.gb-btn--md {
+  padding: 6px 12px;
+  font-size: 0.92rem;
+}
+.gb-btn--primary {
+  background: var(--indigo);
+  border-color: var(--indigo);
+  color: var(--on-accent);
+}
+.gb-btn--primary:hover {
+  filter: brightness(1.08);
+  background: var(--indigo);
+}
+.gb-btn--danger {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: var(--on-accent);
+}
+.gb-btn--ghost {
+  background: transparent;
+  border-color: transparent;
+}
+.gb-btn--ghost:hover {
+  background: var(--hover);
+}
+
+/* Tabs */
+.gb-tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+.gb-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 6px 12px;
+  font-size: 0.88rem;
+  color: var(--dim);
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  max-width: 220px;
+}
+.gb-tab:hover {
+  background: var(--hover);
+}
+.gb-tab.is-active {
+  color: var(--text);
+  border-bottom-color: var(--pink);
+}
+.gb-tab__title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gb-tab__dirty {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--pink);
+}
+.gb-tab__close {
+  border: none;
+  background: transparent;
+  color: var(--dim);
+  cursor: pointer;
+  line-height: 1;
+  font-size: 1rem;
+  padding: 0 2px;
+  border-radius: 3px;
+}
+.gb-tab__close:hover {
+  background: var(--border);
+  color: var(--text);
+}
+
+/* Icon rail */
+.gb-rail {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  width: 68px;
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  padding: var(--space-2) 0;
+}
+.gb-rail__group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.gb-rail__item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 8px 0;
+  border: none;
+  background: transparent;
+  color: var(--dim);
+  cursor: pointer;
+}
+.gb-rail__item:hover {
+  color: var(--text);
+  background: var(--hover);
+}
+.gb-rail__item.is-active {
+  color: var(--text);
+  background: var(--hover);
+  box-shadow: inset 2px 0 0 var(--pink);
+}
+.gb-rail__icon {
+  font-size: 1.1rem;
+  line-height: 1;
+}
+.gb-rail__label {
+  font-size: 0.62rem;
+}
+
+/* Toasts */
+.gb-toasts {
+  position: fixed;
+  right: var(--space-4);
+  bottom: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  z-index: 1000;
+}
+.gb-toast {
+  min-width: 200px;
+  max-width: 360px;
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 0.88rem;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+}
+.gb-toast--success {
+  border-left: 3px solid var(--good);
+}
+.gb-toast--error {
+  border-left: 3px solid var(--danger);
+}
+.gb-toast--info {
+  border-left: 3px solid var(--indigo);
+}
