@@ -5,6 +5,7 @@ import { db, type ConnectionConfig, type Engine } from "../../lib/db";
 import type { EnvTag, StoredConnection } from "../../lib/workspace";
 import { Button } from "../../ui/Button";
 import { noAutocorrect } from "../../ui/inputProps";
+import { buildConnectionUrl, PASSWORD_MASK } from "./connString";
 import { parseConnectionUrl } from "./parseUrl";
 
 const ENGINES: { value: Engine; label: string }[] = [
@@ -55,7 +56,8 @@ export function ConnectionModal({
   const [password, setPassword] = useState(c0?.password ?? "");
   const [database, setDatabase] = useState(c0?.database ?? "");
   const [sslMode, setSslMode] = useState(c0?.sslMode ?? "prefer");
-  const [urlText, setUrlText] = useState("");
+  // S2.9: null = mirror the constructed URL; a string = the user is pasting
+  const [urlOverride, setUrlOverride] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [test, setTest] = useState<TestState>({ kind: "idle" });
 
@@ -65,6 +67,19 @@ export function ConnectionModal({
     return isSqlite
       ? { engine, host: "", port: 0, user: "", database }
       : { engine, host, port, user, password: password || undefined, database, sslMode };
+  }
+
+  // The URL field is live (FR-G2.10): rebuilt from the fields on every render,
+  // password masked unless revealed (S2.8).
+  const builtUrl = buildConnectionUrl(buildConfig(), { maskPassword: !showPassword });
+  const urlText = urlOverride ?? builtUrl;
+
+  /** Wrap a field setter so editing a parameter re-derives the URL field. */
+  function synced<T>(setter: (v: T) => void) {
+    return (v: T) => {
+      setter(v);
+      setUrlOverride(null);
+    };
   }
 
   function applyUrl() {
@@ -77,9 +92,12 @@ export function ConnectionModal({
       if (parsed.host !== undefined) setHost(parsed.host);
       if (parsed.port !== undefined) setPort(parsed.port);
       if (parsed.user !== undefined) setUser(parsed.user);
-      if (parsed.password !== undefined) setPassword(parsed.password);
+      // a masked ••• (from a copied display string) never overwrites the real one
+      if (parsed.password !== undefined && parsed.password !== PASSWORD_MASK)
+        setPassword(parsed.password);
       if (parsed.database !== undefined) setDatabase(parsed.database);
       if (parsed.sslMode !== undefined) setSslMode(parsed.sslMode);
+      setUrlOverride(null); // re-normalize to the canonical constructed string
       setTest({ kind: "idle" });
     } catch (e) {
       setTest({ kind: "error", message: (e as Error).message });
@@ -117,13 +135,13 @@ export function ConnectionModal({
         <h2>{initial?.id ? "Edit connection" : "New connection"}</h2>
 
         <label>
-          Paste URL
+          Connection string
           <div style={{ display: "flex", gap: 6 }}>
             <input
               aria-label="connection url"
               {...noAutocorrect}
               value={urlText}
-              onChange={(e) => setUrlText(e.target.value)}
+              onChange={(e) => setUrlOverride(e.target.value)}
               placeholder="postgres://user:pass@host:5432/db"
             />
             <Button onClick={applyUrl}>Import</Button>
@@ -144,6 +162,7 @@ export function ConnectionModal({
               const next = e.target.value as Engine;
               setEngine(next);
               setPort(DEFAULT_PORT[next]);
+              setUrlOverride(null);
             }}
           >
             {ENGINES.map((x) => (
@@ -161,7 +180,7 @@ export function ConnectionModal({
               aria-label="database"
               {...noAutocorrect}
               value={database}
-              onChange={(e) => setDatabase(e.target.value)}
+              onChange={(e) => synced(setDatabase)(e.target.value)}
               placeholder="/path/to/file.db"
             />
           </label>
@@ -169,7 +188,7 @@ export function ConnectionModal({
           <>
             <label>
               Host
-              <input aria-label="host" {...noAutocorrect} value={host} onChange={(e) => setHost(e.target.value)} />
+              <input aria-label="host" {...noAutocorrect} value={host} onChange={(e) => synced(setHost)(e.target.value)} />
             </label>
             <label>
               Port
@@ -177,12 +196,12 @@ export function ConnectionModal({
                 aria-label="port"
                 type="number"
                 value={port}
-                onChange={(e) => setPort(Number(e.target.value))}
+                onChange={(e) => synced(setPort)(Number(e.target.value))}
               />
             </label>
             <label>
               User
-              <input aria-label="user" {...noAutocorrect} value={user} onChange={(e) => setUser(e.target.value)} />
+              <input aria-label="user" {...noAutocorrect} value={user} onChange={(e) => synced(setUser)(e.target.value)} />
             </label>
             <label>
               Password
@@ -192,7 +211,7 @@ export function ConnectionModal({
                   type={showPassword ? "text" : "password"}
                   {...noAutocorrect}
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={(e) => synced(setPassword)(e.target.value)}
                 />
                 <button
                   type="button"
@@ -211,12 +230,12 @@ export function ConnectionModal({
                 aria-label="database"
                 {...noAutocorrect}
                 value={database}
-                onChange={(e) => setDatabase(e.target.value)}
+                onChange={(e) => synced(setDatabase)(e.target.value)}
               />
             </label>
             <label>
               SSL mode
-              <select aria-label="ssl mode" value={sslMode} onChange={(e) => setSslMode(e.target.value)}>
+              <select aria-label="ssl mode" value={sslMode} onChange={(e) => synced(setSslMode)(e.target.value)}>
                 {["disable", "prefer", "require", "verify-ca", "verify-full"].map((m) => (
                   <option key={m} value={m}>
                     {m}

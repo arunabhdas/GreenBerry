@@ -100,6 +100,10 @@ Each story states its **Value** (why the story exists — what it unlocks or pro
   - **Value:** Passwords pasted or recalled from the app-db are verifiable in place instead of blind-retyped — the top cause of failed first connects.
   - **Acceptance Criteria:** Field defaults to hidden; toggle flips input type text↔password with an accessible label; edit mode reveals the stored password on demand.
   - **Status:** show/hide state in ConnectionModal with `aria-label` "show password"/"hide password"; `noAutocorrect` applied to the field (active when revealed as text); 2 modal tests (toggle flips type both ways; edit mode reveals the stored value).
+- ✅ **S2.9 Live connection-string field** — The modal's URL field is prefilled when editing and rebuilt live as parameter fields change; password inside the URL follows the S2.8 reveal toggle (masked by default); Import still applies a pasted URL to the fields (a masked `•••` password never overwrites the real one) and re-normalizes the field. *(PRD FR-G2.10)*
+  - **Value:** The connection string and the parameter fields stop being two disconnected inputs — what you see in the URL box is always the connection you're about to save.
+  - **Acceptance Criteria:** Edit dialog opens with the URL populated; changing host/port/db updates it immediately; reveal toggle switches the URL's password between `•••` and plaintext; pasted-URL import round-trips.
+  - **Status:** `urlOverride` state (null = derived): field shows `buildConnectionUrl(fields, {maskPassword: !showPassword})` unless the user is typing a paste; every field edit clears the override; Import parses override, skips `•••` passwords, then re-derives. 4 new modal tests.
 
 ### E3 — Workspace, Navigation & Palette
 
@@ -359,7 +363,7 @@ Delivery order follows epic order, with two exceptions carried over from the ori
 *Exit: themed Tauri window; DB-layer ADR decided and benchmarked; typed IPC API; design system in both themes; workspace persistence; remappable shortcuts.*
 
 ### M2 — Connections
-*Epic: E2 · Stories: S2.1–S2.8*
+*Epic: E2 · Stories: S2.1–S2.9*
 *Exit: test-then-save modal across all four engines; SSL + SSH tunnels; environment badges gating prod; multiple live connections; URL paste-import.*
 
 ### M3 — Workspace, Navigation & Palette

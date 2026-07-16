@@ -97,6 +97,65 @@ describe("ConnectionModal", () => {
     expect(field.type).toBe("text");
   });
 
+  const editInitial = {
+    id: "c1",
+    name: "Staging",
+    env: "staging" as const,
+    config: {
+      engine: "postgres" as const,
+      host: "db.internal",
+      port: 5432,
+      user: "ada",
+      password: "s3cret",
+      database: "appdb",
+    },
+  };
+
+  it("prefills the connection string when editing, password masked (S2.9)", () => {
+    render(
+      <ConnectionModal initial={editInitial} onSave={noop} onClose={noop} testConnection={async () => {}} />,
+    );
+    expect(screen.getByLabelText("connection url")).toHaveValue(
+      "postgres://ada:•••@db.internal:5432/appdb?sslmode=prefer",
+    );
+  });
+
+  it("rebuilds the connection string live as parameter fields change (S2.9)", () => {
+    render(<ConnectionModal onSave={noop} onClose={noop} testConnection={async () => {}} />);
+    fireEvent.change(screen.getByLabelText("host"), { target: { value: "h2" } });
+    fireEvent.change(screen.getByLabelText("database"), { target: { value: "mydb" } });
+    const url = (screen.getByLabelText("connection url") as HTMLInputElement).value;
+    expect(url).toContain("h2:5432/mydb");
+  });
+
+  it("connection-string password follows the reveal toggle (S2.9/S2.8)", () => {
+    render(
+      <ConnectionModal initial={editInitial} onSave={noop} onClose={noop} testConnection={async () => {}} />,
+    );
+    const url = () => (screen.getByLabelText("connection url") as HTMLInputElement).value;
+    expect(url()).toContain(":•••@");
+    fireEvent.click(screen.getByLabelText("show password"));
+    expect(url()).toContain(":s3cret@");
+    fireEvent.click(screen.getByLabelText("hide password"));
+    expect(url()).toContain(":•••@");
+  });
+
+  it("importing a masked ••• password never overwrites the real one (S2.9)", () => {
+    render(
+      <ConnectionModal initial={editInitial} onSave={noop} onClose={noop} testConnection={async () => {}} />,
+    );
+    fireEvent.change(screen.getByLabelText("connection url"), {
+      target: { value: "postgres://ada:•••@db2.internal:5432/appdb" },
+    });
+    fireEvent.click(screen.getByText("Import"));
+    expect((screen.getByLabelText("host") as HTMLInputElement).value).toBe("db2.internal");
+    expect((screen.getByLabelText("password") as HTMLInputElement).value).toBe("s3cret");
+    // field re-normalizes to the canonical constructed (masked) string
+    expect((screen.getByLabelText("connection url") as HTMLInputElement).value).toContain(
+      "postgres://ada:•••@db2.internal:5432/appdb",
+    );
+  });
+
   it("disables macOS autocorrect on free-text fields", () => {
     render(<ConnectionModal onSave={noop} onClose={noop} testConnection={async () => {}} />);
     for (const label of ["connection url", "name", "host", "user", "database"]) {
