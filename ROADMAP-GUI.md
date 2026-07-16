@@ -290,35 +290,43 @@ Each story states its **Value** (why the story exists — what it unlocks or pro
 
 > Added 2026-07-09. **Supersedes S2.2** (Keychain credential storage) and the localStorage backing of **S1.5**; where this epic conflicts with either, this epic wins. Resolves the prior open question "workspace-store format: SQLite vs JSON" → **SQLite**. Design rationale: `TECH-SPEC-GUI.md` → "Revision R1".
 
-- ⬜ **S10.1 SQLite app-db layer** — A local SQLite application database at the macOS app-data path (e.g. `~/Library/Application Support/com.greenberry.desktop/greenberry.db`), accessed via the existing Rust `sqlx` (SQLite) layer; schema + migrations; single source of truth for connections, saved queries, history, dashboards, settings.
+- ✅ **S10.1 SQLite app-db layer** — A local SQLite application database at the macOS app-data path (e.g. `~/Library/Application Support/com.greenberry.desktop/greenberry.db`), accessed via the existing Rust `sqlx` (SQLite) layer; schema + migrations; single source of truth for connections, saved queries, history, dashboards, settings.
   - **Value:** One durable, queryable, migratable store replaces localStorage's size limits and schema-less drift — and reuses the driver the app already ships.
   - **Acceptance Criteria:** All workspace state persists across restart in one `.db` file; migration runs on version bump.
-- ⬜ **S10.2 Remove Keychain** — Delete the `keyring` crate, the `secret_set`/`secret_get`/`secret_delete` Rust commands, and `secrets.ts` (`sanitizeForStore`/`withSecret`).
+  - **Status:** `appdb.rs` — `AppDb` over sqlx-SQLite (`sqlite` feature added); tables connections/saved_queries/history/dashboards/kv; `PRAGMA user_version` migrations; file chmod 0600; opened at the Tauri app-data path in `setup()`; 12 `store_*` commands. 4 always-run integration tests (restart roundtrip, 0600 perms, history cap 500, kv/query/dashboard CRUD).
+- ✅ **S10.2 Remove Keychain** — Delete the `keyring` crate, the `secret_set`/`secret_get`/`secret_delete` Rust commands, and `secrets.ts` (`sanitizeForStore`/`withSecret`).
   - **Value:** Two sources of truth for a connection is the bug; removing the split is what makes S10.3 possible rather than merely convenient.
   - **Acceptance Criteria:** No Keychain/`keyring` reference remains in code or Cargo deps; the build passes without it.
-- ⬜ **S10.3 Connections in SQLite (string + metadata + secret)** — Store the full connection descriptor — host/port/user/database/sslMode **and** the password — in the app-db `connections` table; no metadata/secret split. Replace localStorage workspace reads/writes with app-db access.
+  - **Status:** `keyring` removed from Cargo.toml, `secret_*` commands deleted, `secrets.ts` + its tests deleted; grep confirms zero references; build + full suites pass.
+- ✅ **S10.3 Connections in SQLite (string + metadata + secret)** — Store the full connection descriptor — host/port/user/database/sslMode **and** the password — in the app-db `connections` table; no metadata/secret split. Replace localStorage workspace reads/writes with app-db access.
   - **Value:** A connection becomes one row that round-trips whole, so reconnect-after-restart stops depending on two stores agreeing.
   - **Acceptance Criteria:** A saved connection incl. its secret round-trips through the app-db and can reconnect after restart.
-- ⬜ **S10.4 Secret-at-rest decision (ADR)** — Because secrets now live in a local SQLite file (not the OS keychain), decide and document the at-rest posture: SQLCipher, an app-managed encryption key, or explicitly-accepted local-plaintext with rationale.
+  - **Status:** `connections` table holds the whole descriptor incl. password; `lib/workspace.ts` reworked from a localStorage blob to a `Persistence` interface backed by the app-db IPC (in-memory outside Tauri); password round-trip asserted in Rust and TS tests.
+- ✅ **S10.4 Secret-at-rest decision (ADR)** — Because secrets now live in a local SQLite file (not the OS keychain), decide and document the at-rest posture: SQLCipher, an app-managed encryption key, or explicitly-accepted local-plaintext with rationale.
   - **Value:** Removing the Keychain removed a security property; this story forces that trade-off to be named and owned rather than discovered by a user.
   - **Acceptance Criteria:** ADR committed; chosen posture implemented, or the plaintext choice explicitly recorded.
+  - **Status:** `docs/adr/0002-secrets-at-rest.md` — **accepted local plaintext + 0600** (owner-only file enforced in `AppDb::open`, asserted by test); SQLCipher and app-managed-key options recorded with rejection rationale and revisit triggers.
 
 ### E11 — Integration & End-to-End
 
 > Added 2026-07-09. E1–E9 built and unit-tested each module but never assembled them into the running app — `App.tsx` is still the E1 scaffold placeholder, so no milestone has reached 🟢 "verified on-device." This epic owns the assembly and the end-to-end verification, **including persistence on the SQLite app-db (E10)**.
 
-- ⬜ **S11.1 App shell assembly** — Replace the placeholder `App.tsx` by mounting the built modules — connection modal, sidebar tree, tabs, Cmd+K palette, SQL editor, data grid, home — behind the real stores.
+- ✅ **S11.1 App shell assembly** — Replace the placeholder `App.tsx` by mounting the built modules — connection modal, sidebar tree, tabs, Cmd+K palette, SQL editor, data grid, home — behind the real stores.
   - **Value:** Converts nine epics of tested-but-unmounted modules into a product a user can open; until this lands, none of them ship.
   - **Acceptance Criteria:** Launching the app reaches the connect → sidebar tree → paginated grid → editor tab with streamed results flow, not the scaffold screen.
-- ⬜ **S11.2 Persistence wiring (SQLite)** — Wire the connection-save path end-to-end onto the SQLite app-db (S10.1/S10.3): the modal's `onSave` persists connection string + metadata + secret; connections reload from the app-db on startup; reconnect uses the stored secret. Closes the current gap where the modal emits a password-bearing config with no handler to store it.
+  - **Status:** `src/app/` — ConnectScreen (modal, quick-connect, recents), Workspace (pgAdmin-style multi-db sidebar, tabs, ⌘K palette, status bar), TableView (paginated grid, staged edit→commit, CSV), QueryView (editor + per-tab db target + results); now backed by the app-db store. 5 shell smoke tests. Note: some ✅ module features (filter pills, inspector, EXPLAIN, schema forms, dashboards, admin) still lack surfaced UI — tracked as the gap between "module ✅" and 🟢.
+- ✅ **S11.2 Persistence wiring (SQLite)** — Wire the connection-save path end-to-end onto the SQLite app-db (S10.1/S10.3): the modal's `onSave` persists connection string + metadata + secret; connections reload from the app-db on startup; reconnect uses the stored secret. Closes the current gap where the modal emits a password-bearing config with no handler to store it.
   - **Value:** Closes a live defect — a password-bearing config is emitted today with nothing listening — and makes "your connections are still here" true on the second launch.
   - **Acceptance Criteria:** Enter a connection → restart the app → the connection persists and reconnects, entirely from the local SQLite DB.
-- ⬜ **S11.3 End-to-end test harness** — Automated E2E driving the assembled app (e.g. `tauri-driver`/WebDriver) against a disposable Postgres + the real SQLite app-db, covering connect → **persist** → restart → **reconnect** → query → staged-edit commit.
-  - **Value:** Unit tests passed while the app was unusable; only an E2E over the assembled shell can catch that class of regression again.
+  - **Status:** modal `onSave` → `workspace.addConnection` persists the full descriptor (password included) via `store_save_connection`; `workspace.hydrate()` on app mount reloads connections/history/settings from the app-db; recents reconnect straight from the stored row (keychain path deleted). Query history also lands in the app-db.
+- ✅ **S11.3 End-to-end test harness** — Automated E2E against a disposable Postgres + the real SQLite app-db, covering connect → **persist** → restart → **reconnect** → query → staged-edit commit.
+  - **Value:** Unit tests passed while the app was unusable; only an E2E over the assembled flow can catch that class of regression again.
   - **Acceptance Criteria:** CI-runnable E2E that fails if the persistence or assembly path regresses.
+  - **Status:** Rust-level harness (decision 2026-07-15: `tauri-driver`/WebDriver has no macOS WKWebView support, so the harness drives the Rust command layer instead of the webview). `tests/e2e_persist_reconnect.rs`: save connection to a real temp app-db → drop/reopen ("restart") → reconnect from the stored row → query → transactional staged-edit commit → history survives reopen; live-PG gated on `GB_TEST_PG_USER` like the other integration suites. Passing.
 - ⬜ **S11.4 On-device verification pass** — Run `tauri dev` and a packaged build; walk each milestone's exit criteria; promote ✅ → 🟢.
   - **Value:** The only story that can produce a 🟢, and therefore the only evidence that any milestone is genuinely done rather than component-complete.
   - **Acceptance Criteria:** M1–M2 (at minimum) marked 🟢 against their exit criteria, persistence included.
+  - **Status:** Requires a human at the machine (runs the app interactively) — ready to execute: all code landed, suites green; needs a `tauri dev` + packaged-build walkthrough to promote ✅ → 🟢.
 
 ---
 

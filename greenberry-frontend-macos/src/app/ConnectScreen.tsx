@@ -3,7 +3,6 @@ import { invoke } from "@tauri-apps/api/core";
 import { db, type Catalog, type ConnectionConfig } from "../lib/db";
 import { workspace, useWorkspace, type StoredConnection } from "../lib/workspace";
 import { ConnectionModal } from "../features/connections/ConnectionModal";
-import { sanitizeForStore, secrets } from "../features/connections/secrets";
 import { EnvBadge } from "../features/connections/env";
 import { Button } from "../ui/Button";
 import { useTheme } from "../ui/theme";
@@ -38,13 +37,8 @@ export function ConnectScreen({ onConnected }: { onConnected: (s: Session) => vo
   async function connect(stored: StoredConnection, password?: string) {
     setBusy(true);
     try {
-      let config = stored.config;
-      if (!config.password) {
-        const secret = password ?? (await secrets.get(stored.id).catch(() => null));
-        if (secret) config = { ...config, password: secret };
-      } else if (password) {
-        config = { ...config, password };
-      }
+      // The stored row carries its password (app-db, ADR 0002) — no keychain.
+      const config = password ? { ...stored.config, password } : stored.config;
       const connectionId = await db.connect(config);
       const catalog = await db.introspect(connectionId);
       // Server-level lists are best-effort — an empty result must not block
@@ -62,11 +56,13 @@ export function ConnectScreen({ onConnected }: { onConnected: (s: Session) => vo
   }
 
   async function saveAndConnect(stored: StoredConnection, password?: string) {
-    const { config } = sanitizeForStore(stored.config);
-    workspace.addConnection({ ...stored, config });
-    if (password) await secrets.set(stored.id, password).catch(() => {});
+    // S11.2: persist the full descriptor — password included — to the app-db.
+    const full = password
+      ? { ...stored, config: { ...stored.config, password } }
+      : stored;
+    workspace.addConnection(full);
     setModal(false);
-    await connect(stored, password);
+    await connect(full);
   }
 
   async function quickLocalPostgres() {

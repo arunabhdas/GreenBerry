@@ -1,10 +1,12 @@
+pub mod appdb;
 pub mod db;
 
 use std::collections::HashMap;
 
+use appdb::{AppDb, Dashboard, HistoryItem, SavedQuery, StoredConnection};
 use db::{ActiveQueries, Catalog, ConnectionConfig, DbClient, DbError, QueryResult};
 use serde::Serialize;
-use tauri::State;
+use tauri::{Manager, State};
 use tokio::sync::Mutex;
 
 #[derive(Serialize)]
@@ -127,33 +129,73 @@ async fn db_roles(
     client(&state, &connection_id).await?.list_roles().await
 }
 
-// --- OS keychain (S2.2): secrets live here, never in the workspace store ---
+// --- App-db persistence (S10.1/S10.3): connections (incl. password — ADR
+// 0002), saved queries, history, dashboards, settings live in local SQLite.
 
 #[tauri::command]
-fn secret_set(service: String, account: String, secret: String) -> Result<(), String> {
-    keyring::Entry::new(&service, &account)
-        .map_err(|e| e.to_string())?
-        .set_password(&secret)
-        .map_err(|e| e.to_string())
+async fn store_list_connections(db: State<'_, AppDb>) -> Result<Vec<StoredConnection>, DbError> {
+    db.list_connections().await
 }
 
 #[tauri::command]
-fn secret_get(service: String, account: String) -> Result<Option<String>, String> {
-    let entry = keyring::Entry::new(&service, &account).map_err(|e| e.to_string())?;
-    match entry.get_password() {
-        Ok(p) => Ok(Some(p)),
-        Err(keyring::Error::NoEntry) => Ok(None),
-        Err(e) => Err(e.to_string()),
-    }
+async fn store_save_connection(
+    db: State<'_, AppDb>,
+    conn: StoredConnection,
+) -> Result<(), DbError> {
+    db.save_connection(&conn).await
 }
 
 #[tauri::command]
-fn secret_delete(service: String, account: String) -> Result<(), String> {
-    let entry = keyring::Entry::new(&service, &account).map_err(|e| e.to_string())?;
-    match entry.delete_password() {
-        Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
-        Err(e) => Err(e.to_string()),
-    }
+async fn store_delete_connection(db: State<'_, AppDb>, id: String) -> Result<(), DbError> {
+    db.delete_connection(&id).await
+}
+
+#[tauri::command]
+async fn store_add_history(db: State<'_, AppDb>, item: HistoryItem) -> Result<(), DbError> {
+    db.add_history(&item).await
+}
+
+#[tauri::command]
+async fn store_list_history(
+    db: State<'_, AppDb>,
+    limit: Option<i64>,
+) -> Result<Vec<HistoryItem>, DbError> {
+    db.list_history(limit.unwrap_or(500)).await
+}
+
+#[tauri::command]
+async fn store_save_query(db: State<'_, AppDb>, query: SavedQuery) -> Result<(), DbError> {
+    db.save_query(&query).await
+}
+
+#[tauri::command]
+async fn store_list_queries(db: State<'_, AppDb>) -> Result<Vec<SavedQuery>, DbError> {
+    db.list_queries().await
+}
+
+#[tauri::command]
+async fn store_delete_query(db: State<'_, AppDb>, id: String) -> Result<(), DbError> {
+    db.delete_query(&id).await
+}
+
+#[tauri::command]
+async fn store_save_dashboard(db: State<'_, AppDb>, dashboard: Dashboard) -> Result<(), DbError> {
+    db.save_dashboard(&dashboard).await
+}
+
+#[tauri::command]
+async fn store_list_dashboards(db: State<'_, AppDb>) -> Result<Vec<Dashboard>, DbError> {
+    db.list_dashboards().await
+}
+
+#[tauri::command]
+async fn store_get_kv(db: State<'_, AppDb>, key: String) -> Result<Option<String>, DbError> {
+    db.get_kv(&key).await
+}
+
+#[tauri::command]
+async fn store_set_kv(db: State<'_, AppDb>, key: String, value: String) -> Result<(), DbError> {
+    db.set_kv(&key, &value).await
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -163,6 +205,14 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .manage(DbState::default())
+        .setup(|app| {
+            // S10.1: open the app-db at the platform app-data path
+            // (~/Library/Application Support/com.greenberry.desktop/greenberry.db).
+            let path = app.path().app_data_dir()?.join("greenberry.db");
+            let appdb = tauri::async_runtime::block_on(AppDb::open(&path))?;
+            app.manage(appdb);
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             app_info,
             os_username,
@@ -174,9 +224,18 @@ pub fn run() {
             db_exec_batch,
             db_databases,
             db_roles,
-            secret_set,
-            secret_get,
-            secret_delete
+            store_list_connections,
+            store_save_connection,
+            store_delete_connection,
+            store_add_history,
+            store_list_history,
+            store_save_query,
+            store_list_queries,
+            store_delete_query,
+            store_save_dashboard,
+            store_list_dashboards,
+            store_get_kv,
+            store_set_kv
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

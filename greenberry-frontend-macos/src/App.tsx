@@ -1,12 +1,18 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Gallery } from "./ui/Gallery";
 import { ConnectScreen, type Session } from "./app/ConnectScreen";
 import { Workspace } from "./app/Workspace";
+import { workspace } from "./lib/workspace";
 import "./App.css";
 import "./app/workspace.css";
 
 function App() {
   const [session, setSession] = useState<Session | null>(null);
+
+  // S11.2: load connections / history / settings from the SQLite app-db.
+  useEffect(() => {
+    void workspace.hydrate();
+  }, []);
 
   if (typeof window !== "undefined" && window.location.hash === "#gallery") {
     return <Gallery />;
