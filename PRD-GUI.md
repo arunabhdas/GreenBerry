@@ -77,12 +77,14 @@ Requirement IDs are `FR-G<section>.<n>`. Priority: **P0** = MVP-blocking, **P1**
 ### 6.2 Connection management *(→ ROADMAP-GUI.md Epic E2, stories S2.1–S2.7)*
 
 - **FR-G2.1 (P0)** Connection modal with engine picker (PostgreSQL, MySQL/MariaDB, SQLite, SQL Server); fields per engine (host, port with correct defaults 5432/3306/1433, user, password, database; file picker for SQLite); **Test → Save** flow with inline driver errors.
-- **FR-G2.2 (P0)** Secrets stored in the **macOS Keychain**; the workspace store never contains plaintext credentials.
+- **FR-G2.2 (P0)** ~~Secrets stored in the macOS Keychain~~ **Revised by E10 (2026-07-15):** connections — credentials included — persist as single rows in the **local SQLite app-db** (`~/Library/Application Support/com.greenberry.desktop/greenberry.db`, chmod 0600); the Keychain is not used. At-rest posture: accepted local plaintext per **ADR 0002**.
 - **FR-G2.3 (P0)** **Environment tags** (Local / Dev / Staging / Prod) with colors; prod tints the window chrome and participates in the confirmation escalation of FR-G7.4.
 - **FR-G2.4 (P0)** Paste-import from connection URL (`postgresql://…`, `mysql://…`, including query params like `sslmode`).
 - **FR-G2.5 (P1)** SSL modes + certificate upload; SSH tunnels with key-file auth (with `~` expansion — an Arctype paper cut we fix).
 - **FR-G2.6 (P1)** Multiple simultaneous live connections; upper-right status indicator with per-database green/gray lights; a database-selector dropdown on every query/table view (Arctype 0.9.35 behavior).
 - **FR-G2.7 (P1)** MySQL and SQL Server wired end-to-end through the same command API with engine quirks handled (quoting, types, pagination). *(E2/S2.7)*
+- **FR-G2.8 (P0)** **Saved-connections panel** on the opening screen, backed by the SQLite app-db: every persisted connection listed with name, environment tag, engine, and its **connection string** (password masked in the UI); per-row actions — connect, edit (prefilled modal, same id), copy URL (full string incl. password), delete (confirm step). Every connect path persists, including quick-connect; the list survives restart. *(E10/S10.5)*
+- **FR-G2.9 (P1)** **Reveal-password toggle** on the password field of the connection modal (both new and edit): an eye button switches the field between hidden (`type="password"`, default) and visible text; revealed text keeps autocorrect/autocapitalize/spellcheck disabled; the toggle never changes what is saved. *(E2/S2.8)*
 
 ### 6.3 Workspace, navigation & command palette *(→ ROADMAP-GUI.md Epic E3, stories S3.1–S3.5)*
 
@@ -91,6 +93,8 @@ Requirement IDs are `FR-G<section>.<n>`. Priority: **P0** = MVP-blocking, **P1**
 - **FR-G3.3 (P0)** **Cmd+K Quick Find**: fuzzy search across tables, saved queries, dashboards, and app commands; results grouped by type; Enter opens in a tab. Sub-50ms result rendering from cached catalog + workspace index.
 - **FR-G3.4 (P0)** **Async query indicators**: queries keep running when the user switches tabs; a finished tab shows a **green dot**; results are never discarded on tab switch.
 - **FR-G3.5 (P1)** **Home view** (Cmd+0): recent items, connection wizard, bundled SQLite sample database ("open sample" path). No account, no email gate. New-user time-to-first-grid target: < 2 minutes.
+- **FR-G3.6 (P1)** **Query-tab SQL persistence**: the SQL text (and target database) of every open query tab survives navigating away from the tab **and app restarts**, persisted in the SQLite app-db keyed by connection + database; closing the tab deletes its persisted row. Results are not persisted — FR-G3.4 governs in-session results. *(E3/S3.7)*
+- **FR-G3.7 (P1)** **Workspace connections panel & multi-server tree**: a collapsible panel to the **left of the schema tree** mirrors the welcome screen's Saved connections (rows with name, env tag, masked connection string; actions: connect, copy URL, edit, delete). Clicking a saved connection opens that server as an **additional root group** in the schema tree (pgAdmin-style multi-server); each server group can be closed independently without affecting others. Query/table tabs are server-scoped. Query **results stay alive in memory across tab switches** while the tab is open (keep-alive tab panes — the in-shell realization of FR-G3.4); results are not persisted across restarts. *(E3/S3.8)*
 
 ---
 

@@ -45,6 +45,9 @@ export function Palette({
         autoFocus
         aria-label="quick find"
         className="gb-palette__input"
+        autoCorrect="off"
+        autoCapitalize="off"
+        spellCheck={false}
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         onKeyDown={onKeyDown}

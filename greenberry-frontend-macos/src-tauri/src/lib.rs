@@ -3,7 +3,7 @@ pub mod db;
 
 use std::collections::HashMap;
 
-use appdb::{AppDb, Dashboard, HistoryItem, SavedQuery, StoredConnection};
+use appdb::{AppDb, Dashboard, HistoryItem, OpenQuery, SavedQuery, StoredConnection};
 use db::{ActiveQueries, Catalog, ConnectionConfig, DbClient, DbError, QueryResult};
 use serde::Serialize;
 use tauri::{Manager, State};
@@ -188,6 +188,25 @@ async fn store_list_dashboards(db: State<'_, AppDb>) -> Result<Vec<Dashboard>, D
     db.list_dashboards().await
 }
 
+// S3.7: SQL text of open query tabs — saved on edit, removed on tab close.
+#[tauri::command]
+async fn store_save_open_query(db: State<'_, AppDb>, query: OpenQuery) -> Result<(), DbError> {
+    db.save_open_query(&query).await
+}
+
+#[tauri::command]
+async fn store_list_open_queries(
+    db: State<'_, AppDb>,
+    conn_id: String,
+) -> Result<Vec<OpenQuery>, DbError> {
+    db.list_open_queries(&conn_id).await
+}
+
+#[tauri::command]
+async fn store_delete_open_query(db: State<'_, AppDb>, id: String) -> Result<(), DbError> {
+    db.delete_open_query(&id).await
+}
+
 #[tauri::command]
 async fn store_get_kv(db: State<'_, AppDb>, key: String) -> Result<Option<String>, DbError> {
     db.get_kv(&key).await
@@ -234,6 +253,9 @@ pub fn run() {
             store_delete_query,
             store_save_dashboard,
             store_list_dashboards,
+            store_save_open_query,
+            store_list_open_queries,
+            store_delete_open_query,
             store_get_kv,
             store_set_kv
         ])

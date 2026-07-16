@@ -68,6 +68,18 @@ pub struct Dashboard {
     pub payload: String,
 }
 
+/// SQL text of an open query tab (S3.7): survives tab switches and app
+/// restarts; deleted when the tab closes. Keyed by stored-connection id +
+/// the database the tab targets.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OpenQuery {
+    pub id: String,
+    pub conn_id: String,
+    pub db: String,
+    pub sql: String,
+}
+
 const HISTORY_CAP: i64 = 500;
 
 // ---------------------------------------------------------------- appdb
@@ -147,6 +159,21 @@ impl AppDb {
                     value TEXT NOT NULL
                 )",
                 "PRAGMA user_version = 1",
+            ] {
+                sqlx::query(ddl).execute(&self.pool).await?;
+            }
+        }
+        if version < 2 {
+            // v2 (S3.7): SQL text of open query tabs
+            for ddl in [
+                "CREATE TABLE IF NOT EXISTS open_queries (
+                    id TEXT PRIMARY KEY,
+                    conn_id TEXT NOT NULL,
+                    db TEXT NOT NULL,
+                    sql TEXT NOT NULL,
+                    updated_at INTEGER NOT NULL
+                )",
+                "PRAGMA user_version = 2",
             ] {
                 sqlx::query(ddl).execute(&self.pool).await?;
             }
@@ -340,6 +367,54 @@ impl AppDb {
                 payload: r.get("payload"),
             })
             .collect())
+    }
+
+    // ------------------------------------------------------- open query tabs
+
+    pub async fn save_open_query(&self, q: &OpenQuery) -> Result<(), DbError> {
+        sqlx::query(
+            "INSERT INTO open_queries (id, conn_id, db, sql, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5)
+             ON CONFLICT(id) DO UPDATE SET
+               conn_id = excluded.conn_id, db = excluded.db,
+               sql = excluded.sql, updated_at = excluded.updated_at",
+        )
+        .bind(&q.id)
+        .bind(&q.conn_id)
+        .bind(&q.db)
+        .bind(&q.sql)
+        .bind(Self::now_ms())
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    pub async fn list_open_queries(&self, conn_id: &str) -> Result<Vec<OpenQuery>, DbError> {
+        use sqlx::Row as _;
+        let rows = sqlx::query(
+            "SELECT id, conn_id, db, sql FROM open_queries
+             WHERE conn_id = ?1 ORDER BY updated_at",
+        )
+        .bind(conn_id)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows
+            .into_iter()
+            .map(|r| OpenQuery {
+                id: r.get("id"),
+                conn_id: r.get("conn_id"),
+                db: r.get("db"),
+                sql: r.get("sql"),
+            })
+            .collect())
+    }
+
+    pub async fn delete_open_query(&self, id: &str) -> Result<(), DbError> {
+        sqlx::query("DELETE FROM open_queries WHERE id = ?1")
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
     }
 
     // ------------------------------------------------------- settings (kv)

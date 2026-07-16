@@ -180,6 +180,9 @@ export function TableView({
           </span>
           <input
             autoFocus
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
             value={editing.value}
             onChange={(e) => setEditing({ ...editing, value: e.target.value })}
             onKeyDown={(e) => {

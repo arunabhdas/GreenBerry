@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { db, type Catalog, type ConnectionConfig } from "../lib/db";
 import { workspace, useWorkspace, type StoredConnection } from "../lib/workspace";
 import { ConnectionModal } from "../features/connections/ConnectionModal";
-import { EnvBadge } from "../features/connections/env";
+import { SavedConnectionList } from "../features/connections/SavedList";
 import { Button } from "../ui/Button";
 import { useTheme } from "../ui/theme";
 import { useToast } from "../ui/Toast";
@@ -31,8 +31,9 @@ export function ConnectScreen({ onConnected }: { onConnected: (s: Session) => vo
   const { theme, toggleTheme } = useTheme();
   const { notify } = useToast();
   const [modal, setModal] = useState(false);
+  const [editing, setEditing] = useState<StoredConnection | null>(null);
   const [busy, setBusy] = useState(false);
-  const recent = useWorkspace((s) => s.connections);
+  const saved = useWorkspace((s) => s.connections);
 
   async function connect(stored: StoredConnection, password?: string) {
     setBusy(true);
@@ -62,17 +63,26 @@ export function ConnectScreen({ onConnected }: { onConnected: (s: Session) => vo
       : stored;
     workspace.addConnection(full);
     setModal(false);
+    setEditing(null);
     await connect(full);
   }
 
   async function quickLocalPostgres() {
     const user = await invoke<string>("os_username").catch(() => "postgres");
-    await connect({
+    const stored: StoredConnection = {
       id: "local-pg",
       name: "Local Postgres",
       env: "local",
       config: { engine: "postgres", host: "localhost", port: 5432, user, database: "postgres" },
-    });
+    };
+    // S10.5: every connect path persists — quick-connect included.
+    workspace.addConnection(stored);
+    await connect(stored);
+  }
+
+  function deleteConnection(c: StoredConnection) {
+    workspace.removeConnection(c.id);
+    notify(`Deleted “${c.name}”`, "info");
   }
 
   return (
@@ -96,21 +106,34 @@ export function ConnectScreen({ onConnected }: { onConnected: (s: Session) => vo
             <Button onClick={quickLocalPostgres} disabled={busy}>Quick: Local Postgres</Button>
           </div>
 
-          {recent.length > 0 && (
-            <div className="gb-connect__recent">
-              <div style={{ color: "var(--dim)", fontSize: "0.8rem" }}>Recent</div>
-              {recent.map((c) => (
-                <button key={c.id} onClick={() => connect(c)} disabled={busy}>
-                  {c.name} <EnvBadge env={c.env} />{" "}
-                  <span style={{ color: "var(--dim)" }}>· {c.config.engine}</span>
-                </button>
-              ))}
+          {saved.length > 0 && (
+            <div className="gb-connect__saved" aria-label="Saved connections">
+              <div className="gb-connect__savedhead">
+                Saved connections
+                <span className="gb-connect__count">{saved.length}</span>
+              </div>
+              <SavedConnectionList
+                connections={saved}
+                busy={busy}
+                onConnect={connect}
+                onEdit={setEditing}
+                onDelete={deleteConnection}
+              />
             </div>
           )}
         </div>
       </div>
 
-      {modal && <ConnectionModal onSave={saveAndConnect} onClose={() => setModal(false)} />}
+      {(modal || editing) && (
+        <ConnectionModal
+          initial={editing ?? undefined}
+          onSave={saveAndConnect}
+          onClose={() => {
+            setModal(false);
+            setEditing(null);
+          }}
+        />
+      )}
     </div>
   );
 }

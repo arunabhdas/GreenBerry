@@ -4,10 +4,13 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Tauri + React + Typescript</title>
+    <title>GreenBerry</title>
   </head>
 
-  <body>
+  <!-- Desktop DB client: no macOS autocorrect/spellcheck in web content.
+       (spellcheck/autocorrect inherit; form controls also set these
+       explicitly via ui/inputProps.ts since autocapitalize doesn't.) -->
+  <body spellcheck="false" autocorrect="off" autocapitalize="off">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

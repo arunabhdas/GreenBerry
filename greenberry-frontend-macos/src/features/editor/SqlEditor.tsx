@@ -41,6 +41,8 @@ export function SqlEditor({ value, onChange, onRun, running }: SqlEditorProps) {
         className="gb-editor__surface"
         value={value}
         spellCheck={false}
+        autoCorrect="off"
+        autoCapitalize="off"
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={(e) => {
           if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {

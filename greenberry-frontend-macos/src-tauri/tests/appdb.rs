@@ -1,7 +1,7 @@
 //! App-db integration tests (S10.1/S10.3). Pure SQLite in a temp dir —
 //! always runs, no external services needed.
 use greenberry_frontend_macos_lib::appdb::{
-    AppDb, Dashboard, HistoryItem, SavedQuery, StoredConfig, StoredConnection,
+    AppDb, Dashboard, HistoryItem, OpenQuery, SavedQuery, StoredConfig, StoredConnection,
 };
 
 fn conn(id: &str, password: Option<&str>) -> StoredConnection {
@@ -77,6 +77,52 @@ async fn history_caps_at_500_newest() {
     assert_eq!(items.len(), 500);
     assert_eq!(items[0].ts, 509); // newest first, oldest evicted
     assert!(items.iter().all(|h| h.ts >= 10));
+}
+
+#[tokio::test]
+async fn open_queries_persist_per_connection_and_clean_up_on_close() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("g.db");
+
+    {
+        let db = AppDb::open(&path).await.unwrap();
+        db.save_open_query(&OpenQuery {
+            id: "q:1".into(),
+            conn_id: "c1".into(),
+            db: "convoy_app".into(),
+            sql: "SELECT * FROM users".into(),
+        })
+        .await
+        .unwrap();
+        db.save_open_query(&OpenQuery {
+            id: "q:2".into(),
+            conn_id: "other-conn".into(),
+            db: "postgres".into(),
+            sql: "SELECT 2".into(),
+        })
+        .await
+        .unwrap();
+        // editing the tab upserts the same row
+        db.save_open_query(&OpenQuery {
+            id: "q:1".into(),
+            conn_id: "c1".into(),
+            db: "convoy_app".into(),
+            sql: "SELECT * FROM users WHERE role = 'dev'".into(),
+        })
+        .await
+        .unwrap();
+    } // app quit
+
+    let db = AppDb::open(&path).await.unwrap(); // restart (exercises v2 migration path)
+    let mine = db.list_open_queries("c1").await.unwrap();
+    assert_eq!(mine.len(), 1, "scoped to the connection, upsert not dup");
+    assert_eq!(mine[0].db, "convoy_app");
+    assert_eq!(mine[0].sql, "SELECT * FROM users WHERE role = 'dev'");
+
+    // closing the tab cleans up its row only
+    db.delete_open_query("q:1").await.unwrap();
+    assert!(db.list_open_queries("c1").await.unwrap().is_empty());
+    assert_eq!(db.list_open_queries("other-conn").await.unwrap().len(), 1);
 }
 
 #[tokio::test]

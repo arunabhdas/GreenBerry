@@ -96,6 +96,78 @@
 .gb-tree__nest {
   margin-left: 12px;
 }
+.gb-tree__servergroup {
+  margin-bottom: 2px;
+}
+.gb-tree__serverrow {
+  display: flex;
+  align-items: center;
+}
+.gb-tree__server {
+  font-weight: 700;
+  flex: 1;
+}
+.gb-tree__serverclose {
+  border: none;
+  background: transparent;
+  color: var(--dim);
+  cursor: pointer;
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+.gb-tree__serverclose:hover {
+  background: var(--hover);
+  color: var(--danger, #e5484d);
+}
+
+/* connections panel (S3.8) — saved connections docked left of the tree */
+.gb-connpanel {
+  width: 230px;
+  flex: 0 0 230px;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--border);
+  background: var(--panel);
+  min-height: 0;
+}
+.gb-connpanel.is-collapsed {
+  width: 36px;
+  flex-basis: 36px;
+  align-items: center;
+  padding-top: 8px;
+}
+.gb-connpanel__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px;
+  border-bottom: 1px solid var(--border);
+  color: var(--dim);
+  font-size: 0.8rem;
+}
+.gb-connpanel__head button {
+  margin-left: auto;
+  border: none;
+  background: transparent;
+  color: var(--dim);
+  cursor: pointer;
+}
+.gb-connpanel__list {
+  overflow: auto;
+  padding: 6px 8px;
+}
+.gb-connrow__live {
+  color: var(--good, #46a758);
+  margin-right: 4px;
+  font-size: 0.7rem;
+}
+
+/* keep-alive tab panes (S3.8): inactive panes stay mounted, just hidden */
+.gb-ws__pane {
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+}
 .gb-tree__error {
   border: none;
   background: transparent;
@@ -413,6 +485,31 @@
   border-color: var(--indigo);
 }
 
+/* reveal-password toggle (S2.8) */
+.gb-reveal {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.gb-reveal input {
+  flex: 1;
+  min-width: 0;
+}
+.gb-reveal__btn {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: var(--dim);
+  cursor: pointer;
+  padding: 4px 8px;
+  font-size: 0.85rem;
+  line-height: 1.2;
+}
+.gb-reveal__btn:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
 /* ---- home / connect screen ---- */
 .gb-connect {
   flex: 1;
@@ -424,24 +521,79 @@
   max-width: 90vw;
   text-align: center;
 }
-.gb-connect__recent {
-  margin-top: 18px;
+/* saved-connections panel (S10.5) — rows read from the SQLite app-db */
+.gb-connect__saved {
+  margin-top: 20px;
   text-align: left;
 }
-.gb-connect__recent button {
-  display: block;
-  width: 100%;
+.gb-connect__savedhead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--dim);
+  font-size: 0.8rem;
+}
+.gb-connect__count {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0 7px;
+  font-size: 0.72rem;
+}
+.gb-connrow {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  margin-top: 6px;
+}
+.gb-connrow__main {
+  flex: 1;
+  min-width: 0;
   text-align: left;
   padding: 8px 10px;
-  margin-top: 6px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--panel);
   color: var(--text);
   cursor: pointer;
 }
-.gb-connect__recent button:hover {
+.gb-connrow__main:hover {
   background: var(--hover);
+}
+.gb-connrow__name {
+  display: block;
+}
+.gb-connrow__url {
+  display: block;
+  margin-top: 3px;
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  color: var(--dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gb-connrow__actions {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+}
+.gb-connrow__actions button {
+  border: none;
+  background: transparent;
+  color: var(--dim);
+  cursor: pointer;
+  border-radius: 6px;
+  padding: 1px 6px;
+  font-size: 0.8rem;
+  line-height: 1.3;
+}
+.gb-connrow__actions button:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+.gb-connrow__actions button.is-danger {
+  color: var(--danger, #e5484d);
 }
 
 /* cell inspector */

@@ -16,6 +16,8 @@ export function QueryView({
   initialDatabase,
   resolveConnection,
   initialSql,
+  onSqlChange,
+  onDatabaseChange,
 }: {
   /** Every database on the server, for the per-tab target dropdown. */
   databases: string[];
@@ -24,6 +26,9 @@ export function QueryView({
   /** Lazily open/reuse the connection for a database; throws on failure. */
   resolveConnection: (database: string) => Promise<string>;
   initialSql?: string;
+  /** S3.7: lets the tab owner persist the SQL text across switches/restarts. */
+  onSqlChange?: (sql: string) => void;
+  onDatabaseChange?: (database: string) => void;
 }) {
   const { notify } = useToast();
   const [sql, setSql] = useState(initialSql ?? "SELECT 1;");
@@ -78,7 +83,10 @@ export function QueryView({
         <select
           aria-label="query database"
           value={database}
-          onChange={(e) => setDatabase(e.target.value)}
+          onChange={(e) => {
+            setDatabase(e.target.value);
+            onDatabaseChange?.(e.target.value);
+          }}
         >
           {targets.map((d) => (
             <option key={d} value={d}>
@@ -87,7 +95,15 @@ export function QueryView({
           ))}
         </select>
       </div>
-      <SqlEditor value={sql} onChange={setSql} onRun={run} running={running} />
+      <SqlEditor
+        value={sql}
+        onChange={(v) => {
+          setSql(v);
+          onSqlChange?.(v);
+        }}
+        onRun={run}
+        running={running}
+      />
       <div
         ref={wrapRef}
         style={{ flex: 1, minHeight: 0, borderTop: "1px solid var(--border)" }}

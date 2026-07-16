@@ -96,6 +96,10 @@ Each story states its **Value** (why the story exists — what it unlocks or pro
   - **Value:** Delivers the four-engine promise and proves the S1.3 seam is genuinely engine-agnostic rather than Postgres-shaped.
   - **Acceptance Criteria:** Full browse + query parity with Postgres on MySQL 8 and SQL Server 2019+.
   - **Status:** MySQL adapter fully implemented (sqlx MySql: connect/query via JSON_OBJECT, cancel via KILL QUERY, introspect w/ PK+FK, exec_batch transaction) behind a DbClient engine-dispatch enum; **integration-tested against live MySQL 9.7**. SQL Server (tiberius) still needs a running server — no local macOS install.
+- ✅ **S2.8 Reveal-password toggle** — Eye button on the connection modal's password field (new and edit) switching between hidden (default) and visible text; revealed text keeps autocorrect/spellcheck off; toggling never alters the saved value. *(PRD FR-G2.9)*
+  - **Value:** Passwords pasted or recalled from the app-db are verifiable in place instead of blind-retyped — the top cause of failed first connects.
+  - **Acceptance Criteria:** Field defaults to hidden; toggle flips input type text↔password with an accessible label; edit mode reveals the stored password on demand.
+  - **Status:** show/hide state in ConnectionModal with `aria-label` "show password"/"hide password"; `noAutocorrect` applied to the field (active when revealed as text); 2 modal tests (toggle flips type both ways; edit mode reveals the stored value).
 
 ### E3 — Workspace, Navigation & Palette
 
@@ -123,6 +127,14 @@ Each story states its **Value** (why the story exists — what it unlocks or pro
   - **Value:** A server is more than one database — without this, everything outside the login db is invisible (the `\list` parity gap found in on-device testing).
   - **Acceptance Criteria:** All server dbs visible; expanding connects lazily and shows that db's tables; failed opens show an inline retry; Disconnect closes every pooled connection.
   - **Status:** Rust `list_databases`/`list_roles` (PG `pg_database`/`pg_roles`, MySQL schemata/mysql.user) + `db_databases`/`db_roles` commands (live PG integration test); frontend `DbPool` (lazy connect, in-flight dedupe, error retry, disconnectAll; 7 tests) + Sidebar tree rework (8 tests) + per-tab query target dropdown (Workspace 5 tests).
+- ✅ **S3.7 Query-tab SQL persistence** — The SQL text and target database of an open query tab survive tab switches and app restarts, stored in the app-db (`open_queries` table, keyed per connection + database); closing the tab deletes its row. Results are intentionally not persisted. *(PRD FR-G3.6)*
+  - **Value:** Typing SQL, glancing at a table, and coming back to an empty editor destroys the core query loop; persistence makes tabs trustworthy.
+  - **Acceptance Criteria:** Type SQL → switch tabs → return: text intact. Restart the app and reconnect: the query tabs reopen with their SQL. Close a tab: its persisted row is gone.
+  - **Status:** SQL/db lifted into Workspace tab state (instant in-memory persistence across switches); `open_queries` app-db table (migration v2) + `store_save/list/delete_open_query` commands; debounced (400 ms) upsert on edit, delete on tab close, restore on workspace mount. Rust roundtrip test incl. v1→v2 migration; Workspace tests for switch-survival, close-cleanup, and mount-restore.
+- ✅ **S3.8 Workspace connections panel, multi-server tree & live results** — Collapsible saved-connections panel left of the schema tree (same rows/actions as the welcome screen); clicking a connection opens that server as an additional root group in the tree (pgAdmin multi-server), closable per server; tabs are server-scoped; tab panes are kept mounted so **query results survive tab switches** in memory (the in-shell delivery of S3.4's "results never lost"). *(PRD FR-G3.7)*
+  - **Value:** Multi-server work (prod vs staging, app vs analytics) stops requiring disconnect round-trips, and results stop evaporating when the user glances at a table.
+  - **Acceptance Criteria:** Open a second server from the panel → both servers browsable in one tree; close one server → the other unaffected; run a query → switch tabs → return: results still rendered without re-running.
+  - **Status:** Workspace reworked to a per-server session map (each server gets its own `DbPool`, databases, roles); `Sidebar` gained server root groups with per-server close; shared `SavedConnectionList` component reused by welcome screen + new `ConnectionsPanel`; keep-alive tab panes (`display:none` for inactive) preserve results/scroll/staged edits; per-server open-query restore. Tests: multi-server open/close, results-survive-switch, panel actions.
 
 ### E4 — Table Grid (Spreadsheet)
 
@@ -306,6 +318,10 @@ Each story states its **Value** (why the story exists — what it unlocks or pro
   - **Value:** Removing the Keychain removed a security property; this story forces that trade-off to be named and owned rather than discovered by a user.
   - **Acceptance Criteria:** ADR committed; chosen posture implemented, or the plaintext choice explicitly recorded.
   - **Status:** `docs/adr/0002-secrets-at-rest.md` — **accepted local plaintext + 0600** (owner-only file enforced in `AppDb::open`, asserted by test); SQLCipher and app-managed-key options recorded with rejection rationale and revisit triggers.
+- ✅ **S10.5 Saved-connections panel** — The opening screen lists every connection persisted in the app-db with name, env tag, engine, and its **connection string** (password masked in the UI); per-row actions: connect, edit (prefilled modal, upserts the same id), copy URL (full string incl. password), delete (confirm step). All connect paths persist — including Quick: Local Postgres. *(PRD FR-G2.8)*
+  - **Value:** E10 made connections durable but invisible; this makes the persistence inspectable — the user can see, verify, and manage exactly what the app-db holds.
+  - **Acceptance Criteria:** A saved connection appears with its (masked) connection string after restart; edit round-trips through the modal onto the same row; delete removes it durably; copy yields a paste-able URL.
+  - **Status:** ConnectScreen "Saved connections" panel (rows: name + env badge + masked URL; actions: connect / copy / edit / two-step delete); `connString.ts` `buildConnectionUrl` (mask option, percent-encoding, sqlite + sslmode; round-trips `parseUrl`) with 5 tests; quick-connect now persists (`local-pg` upsert); 6 ConnectScreen tests (mask never leaks the password, copy includes it, confirm-delete, edit-upsert, connect, quick-persist).
 
 ### E11 — Integration & End-to-End
 
@@ -343,11 +359,11 @@ Delivery order follows epic order, with two exceptions carried over from the ori
 *Exit: themed Tauri window; DB-layer ADR decided and benchmarked; typed IPC API; design system in both themes; workspace persistence; remappable shortcuts.*
 
 ### M2 — Connections
-*Epic: E2 · Stories: S2.1–S2.7*
+*Epic: E2 · Stories: S2.1–S2.8*
 *Exit: test-then-save modal across all four engines; SSL + SSH tunnels; environment badges gating prod; multiple live connections; URL paste-import.*
 
 ### M3 — Workspace, Navigation & Palette
-*Epic: E3 · Stories: S3.1–S3.6*
+*Epic: E3 · Stories: S3.1–S3.8*
 *Exit: sidebar schema tree; tabs surviving switches; Cmd+K across every object type; queries running across tab switches; home view reaching a grid in under 2 minutes; every server database browsable from one pgAdmin-style tree.*
 
 ### M4 — Table Grid
@@ -375,7 +391,7 @@ Delivery order follows epic order, with two exceptions carried over from the ori
 *Exit: performance budgets measured in CI; signed and notarized `.dmg` installing cleanly on fresh macOS; working auto-updater; direct download with no email gate.*
 
 ### M10 — Persistence: SQLite app-db
-*Epic: E10 · Stories: S10.1–S10.4*
+*Epic: E10 · Stories: S10.1–S10.5*
 *Exit: all workspace state — connections, secrets, saved queries, history, dashboards, settings — lives in one migrated SQLite app-db; Keychain removed; secret-at-rest posture decided in an ADR.*
 
 ### M11 — Integration & End-to-End

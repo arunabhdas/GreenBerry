@@ -58,4 +58,52 @@ describe("ConnectionModal", () => {
     expect(screen.getByLabelText("database")).toBeInTheDocument();
     expect(screen.queryByLabelText("host")).toBeNull();
   });
+
+  it("reveal toggle flips the password field type both ways (S2.8)", () => {
+    render(<ConnectionModal onSave={noop} onClose={noop} testConnection={async () => {}} />);
+    const field = screen.getByLabelText("password") as HTMLInputElement;
+    expect(field.type).toBe("password"); // hidden by default
+    fireEvent.click(screen.getByLabelText("show password"));
+    expect(field.type).toBe("text");
+    fireEvent.click(screen.getByLabelText("hide password"));
+    expect(field.type).toBe("password");
+  });
+
+  it("edit mode reveals the stored password on demand", () => {
+    render(
+      <ConnectionModal
+        initial={{
+          id: "c1",
+          name: "Staging",
+          env: "staging",
+          config: {
+            engine: "postgres",
+            host: "db.internal",
+            port: 5432,
+            user: "ada",
+            password: "s3cret",
+            database: "appdb",
+          },
+        }}
+        onSave={noop}
+        onClose={noop}
+        testConnection={async () => {}}
+      />,
+    );
+    const field = screen.getByLabelText("password") as HTMLInputElement;
+    expect(field.value).toBe("s3cret"); // prefilled from the stored row
+    expect(field.type).toBe("password"); // but hidden until revealed
+    fireEvent.click(screen.getByLabelText("show password"));
+    expect(field.type).toBe("text");
+  });
+
+  it("disables macOS autocorrect on free-text fields", () => {
+    render(<ConnectionModal onSave={noop} onClose={noop} testConnection={async () => {}} />);
+    for (const label of ["connection url", "name", "host", "user", "database"]) {
+      const field = screen.getByLabelText(label);
+      expect(field).toHaveAttribute("autocorrect", "off");
+      expect(field).toHaveAttribute("autocapitalize", "off");
+      expect(field).toHaveAttribute("spellcheck", "false");
+    }
+  });
 });

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { db, type ConnectionConfig, type Engine } from "../../lib/db";
 import type { EnvTag, StoredConnection } from "../../lib/workspace";
 import { Button } from "../../ui/Button";
+import { noAutocorrect } from "../../ui/inputProps";
 import { parseConnectionUrl } from "./parseUrl";
 
 const ENGINES: { value: Engine; label: string }[] = [
@@ -55,6 +56,7 @@ export function ConnectionModal({
   const [database, setDatabase] = useState(c0?.database ?? "");
   const [sslMode, setSslMode] = useState(c0?.sslMode ?? "prefer");
   const [urlText, setUrlText] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [test, setTest] = useState<TestState>({ kind: "idle" });
 
   const isSqlite = engine === "sqlite";
@@ -119,6 +121,7 @@ export function ConnectionModal({
           <div style={{ display: "flex", gap: 6 }}>
             <input
               aria-label="connection url"
+              {...noAutocorrect}
               value={urlText}
               onChange={(e) => setUrlText(e.target.value)}
               placeholder="postgres://user:pass@host:5432/db"
@@ -129,7 +132,7 @@ export function ConnectionModal({
 
         <label>
           Name
-          <input aria-label="name" value={name} onChange={(e) => setName(e.target.value)} />
+          <input aria-label="name" {...noAutocorrect} value={name} onChange={(e) => setName(e.target.value)} />
         </label>
 
         <label>
@@ -156,6 +159,7 @@ export function ConnectionModal({
             File path
             <input
               aria-label="database"
+              {...noAutocorrect}
               value={database}
               onChange={(e) => setDatabase(e.target.value)}
               placeholder="/path/to/file.db"
@@ -165,7 +169,7 @@ export function ConnectionModal({
           <>
             <label>
               Host
-              <input aria-label="host" value={host} onChange={(e) => setHost(e.target.value)} />
+              <input aria-label="host" {...noAutocorrect} value={host} onChange={(e) => setHost(e.target.value)} />
             </label>
             <label>
               Port
@@ -178,21 +182,34 @@ export function ConnectionModal({
             </label>
             <label>
               User
-              <input aria-label="user" value={user} onChange={(e) => setUser(e.target.value)} />
+              <input aria-label="user" {...noAutocorrect} value={user} onChange={(e) => setUser(e.target.value)} />
             </label>
             <label>
               Password
-              <input
-                aria-label="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
+              <div className="gb-reveal">
+                <input
+                  aria-label="password"
+                  type={showPassword ? "text" : "password"}
+                  {...noAutocorrect}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+                <button
+                  type="button"
+                  className="gb-reveal__btn"
+                  aria-label={showPassword ? "hide password" : "show password"}
+                  title={showPassword ? "Hide password" : "Show password"}
+                  onClick={() => setShowPassword((v) => !v)}
+                >
+                  {showPassword ? "🙈" : "👁"}
+                </button>
+              </div>
             </label>
             <label>
               Database
               <input
                 aria-label="database"
+                {...noAutocorrect}
                 value={database}
                 onChange={(e) => setDatabase(e.target.value)}
               />

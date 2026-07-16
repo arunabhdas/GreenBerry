@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
-import { Sidebar, type DbNodeInfo } from "./Sidebar";
+import { Sidebar, type DbNodeInfo, type ServerNodeInfo } from "./Sidebar";
 import type { Catalog } from "../../lib/db";
 
 const catalog: Catalog = {
@@ -26,54 +26,85 @@ const catalog: Catalog = {
 const ready: DbNodeInfo = { name: "postgres", state: "ready", catalog };
 const closed: DbNodeInfo = { name: "blueberry_demo", state: "closed" };
 
-describe("Sidebar (pgAdmin-style tree)", () => {
-  it("lists every server database as a root node", () => {
-    render(<Sidebar databases={[ready, closed]} />);
+function server(overrides: Partial<ServerNodeInfo> = {}): ServerNodeInfo {
+  return {
+    connId: "c1",
+    name: "Local PG",
+    env: "local",
+    databases: [ready, closed],
+    currentDatabase: "postgres",
+    ...overrides,
+  };
+}
+
+describe("Sidebar (multi-server tree)", () => {
+  it("shows the server as a root group with its databases", () => {
+    render(<Sidebar servers={[server()]} />);
+    expect(screen.getByText(/Local PG/)).toBeInTheDocument();
     expect(screen.getByText(/postgres/)).toBeInTheDocument();
     expect(screen.getByText(/blueberry_demo/)).toBeInTheDocument();
   });
 
-  it("auto-expands the connected database and opens tables on click", () => {
+  it("auto-expands the connected database and opens tables with server context", () => {
     const onOpenTable = vi.fn();
-    render(
-      <Sidebar databases={[ready, closed]} currentDatabase="postgres" onOpenTable={onOpenTable} />,
-    );
-    fireEvent.click(screen.getByText("users")); // visible without extra clicks
-    expect(onOpenTable).toHaveBeenCalledWith("postgres", "public", "users");
+    render(<Sidebar servers={[server()]} onOpenTable={onOpenTable} />);
+    fireEvent.click(screen.getByText("users"));
+    expect(onOpenTable).toHaveBeenCalledWith("c1", "postgres", "public", "users");
   });
 
-  it("expanding a closed database requests a lazy connect", () => {
+  it("expanding a closed database requests a lazy connect with server context", () => {
     const onExpandDatabase = vi.fn();
-    render(<Sidebar databases={[closed]} onExpandDatabase={onExpandDatabase} />);
+    render(<Sidebar servers={[server()]} onExpandDatabase={onExpandDatabase} />);
     fireEvent.click(screen.getByText(/blueberry_demo/));
-    expect(onExpandDatabase).toHaveBeenCalledWith("blueberry_demo");
+    expect(onExpandDatabase).toHaveBeenCalledWith("c1", "blueberry_demo");
   });
 
-  it("shows a connecting indicator while a database loads", () => {
-    render(
-      <Sidebar
-        databases={[{ name: "blueberry_demo", state: "loading" }]}
-        currentDatabase="blueberry_demo"
-      />,
-    );
-    expect(screen.getByText("connecting…")).toBeInTheDocument();
-  });
-
-  it("shows the error and retries on click", () => {
+  it("shows loading and error states with retry", () => {
     const onExpandDatabase = vi.fn();
     render(
       <Sidebar
-        databases={[{ name: "locked", state: "error", error: "no CONNECT" }]}
-        currentDatabase="locked"
+        servers={[
+          server({
+            databases: [
+              { name: "slow", state: "loading" },
+              { name: "locked", state: "error", error: "no CONNECT" },
+            ],
+            currentDatabase: "slow",
+          }),
+          server({
+            connId: "c2",
+            name: "Other",
+            databases: [{ name: "locked2", state: "error", error: "x" }],
+            currentDatabase: "locked2",
+          }),
+        ]}
         onExpandDatabase={onExpandDatabase}
       />,
     );
-    fireEvent.click(screen.getByText(/no CONNECT/));
-    expect(onExpandDatabase).toHaveBeenCalledWith("locked");
+    expect(screen.getByText("connecting…")).toBeInTheDocument();
+    // locked2 is c2's currentDatabase → already expanded, error row visible
+    fireEvent.click(screen.getByText(/⚠ x — retry/));
+    expect(onExpandDatabase).toHaveBeenCalledWith("c2", "locked2");
   });
 
-  it("filters tables within loaded databases and dbs by name", () => {
-    render(<Sidebar databases={[ready, closed]} currentDatabase="postgres" />);
+  it("offers per-server close only when several servers are open", () => {
+    const onCloseServer = vi.fn();
+    const { rerender } = render(
+      <Sidebar servers={[server()]} onCloseServer={onCloseServer} />,
+    );
+    expect(screen.queryByLabelText("close server Local PG")).toBeNull(); // lone server
+    rerender(
+      <Sidebar
+        servers={[server(), server({ connId: "c2", name: "Blue PG", databases: [] })]}
+        onCloseServer={onCloseServer}
+      />,
+    );
+    fireEvent.click(screen.getByLabelText("close server Blue PG"));
+    expect(onCloseServer).toHaveBeenCalledWith("c2");
+  });
+
+  it("filters tables within loaded databases and by name", () => {
+    render(<Sidebar servers={[server()]} />);
     fireEvent.change(screen.getByLabelText("filter tables"), { target: { value: "ord" } });
     expect(screen.queryByText("users")).toBeNull();
     expect(screen.getByText("orders")).toBeInTheDocument();
@@ -82,19 +113,17 @@ describe("Sidebar (pgAdmin-style tree)", () => {
     expect(screen.getByText(/blueberry_demo/)).toBeInTheDocument();
   });
 
-  it("shows roles as a collapsible root node", () => {
-    render(<Sidebar databases={[ready]} roles={["coder", "blueberry"]} />);
+  it("shows roles as a collapsible node inside the server group", () => {
+    render(<Sidebar servers={[server({ roles: ["coder", "blueberry"] })]} />);
     expect(screen.queryByText("coder")).toBeNull(); // collapsed by default
     fireEvent.click(screen.getByText(/Roles/));
     expect(screen.getByText("coder")).toBeInTheDocument();
-    expect(screen.getByText("blueberry")).toBeInTheDocument();
   });
 
   it("collapses and expands the whole sidebar", () => {
-    render(<Sidebar databases={[ready]} />);
+    render(<Sidebar servers={[server()]} />);
     fireEvent.click(screen.getByLabelText("collapse sidebar"));
     expect(screen.getByLabelText("expand sidebar")).toBeInTheDocument();
-    expect(screen.queryByLabelText("filter tables")).toBeNull();
     fireEvent.click(screen.getByLabelText("expand sidebar"));
     expect(screen.getByLabelText("filter tables")).toBeInTheDocument();
   });

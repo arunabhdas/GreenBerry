@@ -1,8 +1,10 @@
 import { useState } from "react";
 import type { Catalog } from "../../lib/db";
+import type { EnvTag } from "../../lib/workspace";
+import { EnvBadge } from "../connections/env";
 import { buildTree, filterTree, type TreeNode } from "./tree";
 
-/** One server database as shown in the tree (pgAdmin-style). */
+/** One database under a server (pgAdmin-style). */
 export interface DbNodeInfo {
   name: string;
   /** closed = not yet connected; expanding a closed/error node connects lazily. */
@@ -11,25 +13,26 @@ export interface DbNodeInfo {
   error?: string;
 }
 
-export interface SidebarProps {
-  /** Every database on the server (like `\list`), with per-db load state. */
+/** One connected server: a root group in the tree (S3.8 multi-server). */
+export interface ServerNodeInfo {
+  connId: string;
+  name: string;
+  env: EnvTag;
   databases: DbNodeInfo[];
-  /** Auto-expanded on first render (the database connected at login). */
-  currentDatabase?: string;
-  /** Connect + introspect a database; called when a closed node is expanded. */
-  onExpandDatabase?: (database: string) => void;
-  onOpenTable?: (database: string, schema: string, table: string) => void;
-  /** Server roles (like `\du`), shown as a root-level tree node. */
   roles?: string[];
+  /** Database to auto-expand (the one connected at login). */
+  currentDatabase?: string;
 }
 
-export function Sidebar({
-  databases,
-  currentDatabase,
-  onExpandDatabase,
-  onOpenTable,
-  roles,
-}: SidebarProps) {
+export interface SidebarProps {
+  servers: ServerNodeInfo[];
+  onExpandDatabase?: (connId: string, database: string) => void;
+  onOpenTable?: (connId: string, database: string, schema: string, table: string) => void;
+  /** Close one server without touching the others (hidden for a lone server). */
+  onCloseServer?: (connId: string) => void;
+}
+
+export function Sidebar({ servers, onExpandDatabase, onOpenTable, onCloseServer }: SidebarProps) {
   const [filter, setFilter] = useState("");
   const [collapsed, setCollapsed] = useState(false);
 
@@ -43,20 +46,15 @@ export function Sidebar({
     );
   }
 
-  const q = filter.trim().toLowerCase();
-  const visible = databases.filter((d) => {
-    if (!q) return true;
-    if (d.name.toLowerCase().includes(q)) return true;
-    // keep a loaded db visible when any of its tables/columns match
-    return d.catalog ? filterTree(buildTree(d.catalog), filter).length > 0 : false;
-  });
-
   return (
     <aside className="gb-sidebar" aria-label="Schema">
       <div className="gb-sidebar__head">
         <input
           aria-label="filter tables"
           placeholder="Search tables"
+          autoCorrect="off"
+          autoCapitalize="off"
+          spellCheck={false}
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
         />
@@ -65,19 +63,82 @@ export function Sidebar({
         </button>
       </div>
       <div className="gb-sidebar__tree" role="tree">
-        {visible.map((db) => (
-          <DatabaseNode
-            key={db.name}
-            db={db}
+        {servers.map((server) => (
+          <ServerNode
+            key={server.connId}
+            server={server}
             filter={filter}
-            defaultOpen={db.name === currentDatabase}
-            onExpand={onExpandDatabase}
+            canClose={servers.length > 1 && !!onCloseServer}
+            onClose={onCloseServer}
+            onExpandDatabase={onExpandDatabase}
             onOpenTable={onOpenTable}
           />
         ))}
-        {roles && roles.length > 0 && !q && <RolesNode roles={roles} />}
       </div>
     </aside>
+  );
+}
+
+function ServerNode({
+  server,
+  filter,
+  canClose,
+  onClose,
+  onExpandDatabase,
+  onOpenTable,
+}: {
+  server: ServerNodeInfo;
+  filter: string;
+  canClose: boolean;
+  onClose?: (connId: string) => void;
+  onExpandDatabase?: (connId: string, database: string) => void;
+  onOpenTable?: (connId: string, database: string, schema: string, table: string) => void;
+}) {
+  const [open, setOpen] = useState(true);
+  const q = filter.trim().toLowerCase();
+
+  const visible = server.databases.filter((d) => {
+    if (!q) return true;
+    if (d.name.toLowerCase().includes(q)) return true;
+    return d.catalog ? filterTree(buildTree(d.catalog), filter).length > 0 : false;
+  });
+  if (q && visible.length === 0 && !server.name.toLowerCase().includes(q)) return null;
+
+  return (
+    <div role="treeitem" aria-expanded={open} className="gb-tree__servergroup">
+      <div className="gb-tree__serverrow">
+        <button className="gb-tree__row gb-tree__server" onClick={() => setOpen((o) => !o)}>
+          {open ? "▾" : "▸"} ⛃ {server.name} <EnvBadge env={server.env} />
+        </button>
+        {canClose && (
+          <button
+            className="gb-tree__serverclose"
+            aria-label={`close server ${server.name}`}
+            title="Close server"
+            onClick={() => onClose?.(server.connId)}
+          >
+            ✕
+          </button>
+        )}
+      </div>
+      {open && (
+        <div className="gb-tree__nest">
+          {visible.map((db) => (
+            <DatabaseNode
+              key={db.name}
+              db={db}
+              filter={filter}
+              defaultOpen={db.name === server.currentDatabase}
+              onExpand={(name) => onExpandDatabase?.(server.connId, name)}
+              onOpenTable={(name, schema, table) =>
+                onOpenTable?.(server.connId, name, schema, table)
+              }
+            />
+          ))}
+          {server.roles && server.roles.length > 0 && !q && <RolesNode roles={server.roles} />}
+        </div>
+      )}
+    </div>
   );
 }
 
