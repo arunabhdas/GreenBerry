@@ -2,9 +2,9 @@
 
 | | |
 |---|---|
-| **Codebase** | `greenberry-frontend-macos/` — Tauri 2 (Rust) + React 19 + TypeScript + Vite 7 |
+| **Codebase** | `_greenberry-frontend-macos/` — Tauri 2 (Rust) + React 19 + TypeScript + Vite 7 |
 | **Companion docs** | `PRD-GUI.md` (requirements) · `ROADMAP-GUI.md` (stories & status) · `TECH-SPEC-GUI.md` (design) |
-| **ADRs** | [`docs/adr/0001-db-access-layer.md`](greenberry-frontend-macos/docs/adr/0001-db-access-layer.md) — Rust `sqlx` in-process (no Node sidecar) · [`docs/adr/0002-secrets-at-rest.md`](greenberry-frontend-macos/docs/adr/0002-secrets-at-rest.md) — plaintext app-db + 0600 (no Keychain) |
+| **ADRs** | [`docs/adr/0001-db-access-layer.md`](_greenberry-frontend-macos/docs/adr/0001-db-access-layer.md) — Rust `sqlx` in-process (no Node sidecar) · [`docs/adr/0002-secrets-at-rest.md`](_greenberry-frontend-macos/docs/adr/0002-secrets-at-rest.md) — plaintext app-db + 0600 (no Keychain) |
 | **Audience** | Developers working on the app. For *what to build*, read the PRD; for *what's done*, the roadmap. |
 
 ---
@@ -14,7 +14,7 @@
 Prerequisites: **Rust** (stable, via rustup), **Node 20+**, and Xcode command-line tools. A local **PostgreSQL** (and optionally **MySQL**) is only needed for the gated integration tests and manual testing.
 
 ```sh
-cd greenberry-frontend-macos
+cd _greenberry-frontend-macos
 npm install
 
 # run the desktop app (starts Vite on :1420 + the Tauri shell)
@@ -70,7 +70,7 @@ A **server** = one saved connection opened in the workspace. Each server gets it
 ## 3. Repository layout
 
 ```
-greenberry-frontend-macos/
+_greenberry-frontend-macos/
 ├─ index.html                  # body sets spellcheck/autocorrect/autocapitalize off
 ├─ vitest.config.ts            # jsdom, setupFiles: src/test/setup.ts
 ├─ docs/adr/                   # architecture decision records
