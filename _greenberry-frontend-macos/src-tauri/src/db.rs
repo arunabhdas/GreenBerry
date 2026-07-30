@@ -9,7 +9,8 @@ use std::time::{Duration, Instant};
 use serde::ser::SerializeStruct;
 use serde::{Deserialize, Serialize, Serializer};
 use sqlx::postgres::{PgConnectOptions, PgPool, PgPoolOptions, PgSslMode};
-use sqlx::{Column as _, Executor as _, Row as _, TypeInfo as _};
+use sqlx::sqlite::{SqliteConnectOptions, SqlitePool, SqlitePoolOptions, SqliteRow};
+use sqlx::{Column as _, Executor as _, Row as _, TypeInfo as _, ValueRef as _};
 use tokio::sync::Mutex;
 
 // ---------------------------------------------------------------- config
@@ -746,12 +747,275 @@ impl MyClient {
     }
 }
 
+// ---------------------------------------------------------------- SQLite client
+
+#[derive(Clone)]
+pub struct SqliteClient {
+    pool: SqlitePool,
+}
+
+/// Decode one cell by its runtime storage class. SQLite is dynamically typed,
+/// so the declared column type is unreliable — the value's own class is the
+/// source of truth. BLOBs render as Postgres-style `\x…` hex.
+fn sqlite_cell_to_json(row: &SqliteRow, i: usize) -> Result<serde_json::Value, DbError> {
+    let raw = row.try_get_raw(i)?;
+    if raw.is_null() {
+        return Ok(serde_json::Value::Null);
+    }
+    match raw.type_info().name() {
+        "INTEGER" => Ok(serde_json::json!(row.try_get::<i64, _>(i)?)),
+        "REAL" => Ok(serde_json::json!(row.try_get::<f64, _>(i)?)),
+        "TEXT" => Ok(serde_json::Value::String(row.try_get::<String, _>(i)?)),
+        "BLOB" => {
+            let bytes: Vec<u8> = row.try_get(i)?;
+            let mut s = String::with_capacity(2 + bytes.len() * 2);
+            s.push_str("\\x");
+            for b in &bytes {
+                s.push_str(&format!("{b:02x}"));
+            }
+            Ok(serde_json::Value::String(s))
+        }
+        _ => match row.try_get::<Option<String>, _>(i) {
+            Ok(Some(s)) => Ok(serde_json::Value::String(s)),
+            _ => Ok(serde_json::Value::Null),
+        },
+    }
+}
+
+impl SqliteClient {
+    pub async fn connect(cfg: &ConnectionConfig) -> Result<Self, DbError> {
+        // SQLite is a single file; the path travels in `database` (S2.1 file picker).
+        let path = cfg.database.trim();
+        if path.is_empty() {
+            return Err(DbError::Connection(
+                "SQLite requires a database file path".into(),
+            ));
+        }
+        let opts = SqliteConnectOptions::new()
+            .filename(path)
+            // Connecting to an existing database — never silently create an
+            // empty file when the path is wrong; surface the error instead.
+            .create_if_missing(false)
+            .foreign_keys(true);
+        let pool = SqlitePoolOptions::new()
+            .max_connections(5)
+            .acquire_timeout(Duration::from_secs(15))
+            .connect_with(opts)
+            .await
+            .map_err(|e| DbError::Connection(e.to_string()))?;
+        Ok(Self { pool })
+    }
+
+    pub async fn ping(&self) -> Result<(), DbError> {
+        sqlx::query("SELECT 1").execute(&self.pool).await?;
+        Ok(())
+    }
+
+    pub async fn run_query(
+        &self,
+        sql: &str,
+        limit: i64,
+        _active: &ActiveQueries,
+        _token: &str,
+    ) -> Result<QueryResult, DbError> {
+        // SQLite has no out-of-band cancellation channel (no backend pid to
+        // signal), and queries are local, so we don't register a cancel token.
+        let start = Instant::now();
+        Self::exec(&self.pool, sql, limit).await.map(|mut r| {
+            r.elapsed_ms = start.elapsed().as_secs_f64() * 1000.0;
+            r
+        })
+    }
+
+    async fn exec(pool: &SqlitePool, sql: &str, limit: i64) -> Result<QueryResult, DbError> {
+        let sql = sql.trim().trim_end_matches(';').trim();
+        if sql.is_empty() {
+            return Err(DbError::Query("empty statement".into()));
+        }
+
+        if !returns_rows(sql) {
+            let res = sqlx::query(sql).execute(pool).await?;
+            return Ok(QueryResult {
+                columns: vec![],
+                rows: vec![],
+                row_count: 0,
+                rows_affected: res.rows_affected(),
+                elapsed_ms: 0.0,
+                truncated: false,
+            });
+        }
+
+        // Wrap so LIMIT applies regardless of the query's own clauses; fetch
+        // limit+1 to detect truncation without a second count query.
+        let wrapped = format!("SELECT * FROM ({sql}) AS __gb LIMIT {}", limit + 1);
+        let fetched = sqlx::query(&wrapped).fetch_all(pool).await?;
+
+        // Column names from the first row; fall back to `describe` for the
+        // zero-row case where no row carries column metadata.
+        let columns: Vec<ColumnInfo> = if let Some(first) = fetched.first() {
+            first
+                .columns()
+                .iter()
+                .map(|c| ColumnInfo {
+                    name: c.name().to_string(),
+                    data_type: c.type_info().name().to_string(),
+                })
+                .collect()
+        } else {
+            let mut conn = pool.acquire().await?;
+            let described = (&mut *conn).describe(&wrapped).await?;
+            described
+                .columns()
+                .iter()
+                .map(|c| ColumnInfo {
+                    name: c.name().to_string(),
+                    data_type: c.type_info().name().to_string(),
+                })
+                .collect()
+        };
+
+        let truncated = fetched.len() as i64 > limit;
+        let take = if truncated { limit as usize } else { fetched.len() };
+        let mut rows: Vec<Vec<serde_json::Value>> = Vec::with_capacity(take);
+        for r in fetched.iter().take(take) {
+            let mut out = Vec::with_capacity(columns.len());
+            for i in 0..columns.len() {
+                out.push(sqlite_cell_to_json(r, i)?);
+            }
+            rows.push(out);
+        }
+
+        Ok(QueryResult {
+            row_count: rows.len(),
+            columns,
+            rows,
+            rows_affected: 0,
+            elapsed_ms: 0.0,
+            truncated,
+        })
+    }
+
+    pub async fn cancel(&self, _id: i64) -> Result<bool, DbError> {
+        // No side-channel cancellation for a local SQLite connection.
+        Ok(false)
+    }
+
+    /// Attached databases (main/temp/…). SQLite is single-file, so this is
+    /// normally just `main`.
+    pub async fn list_databases(&self) -> Result<Vec<String>, DbError> {
+        let names: Vec<String> =
+            sqlx::query_scalar("SELECT name FROM pragma_database_list ORDER BY seq")
+                .fetch_all(&self.pool)
+                .await
+                .unwrap_or_else(|_| vec!["main".to_string()]);
+        Ok(if names.is_empty() {
+            vec!["main".to_string()]
+        } else {
+            names
+        })
+    }
+
+    /// SQLite has no server-side roles/users.
+    pub async fn list_roles(&self) -> Result<Vec<String>, DbError> {
+        Ok(vec![])
+    }
+
+    pub async fn exec_batch(&self, statements: &[String]) -> Result<u64, DbError> {
+        let mut tx = self.pool.begin().await?;
+        let mut affected: u64 = 0;
+        for (i, stmt) in statements.iter().enumerate() {
+            let s = stmt.trim().trim_end_matches(';').trim();
+            if s.is_empty() {
+                continue;
+            }
+            match sqlx::query(s).execute(&mut *tx).await {
+                Ok(r) => affected += r.rows_affected(),
+                Err(e) => return Err(DbError::Query(format!("statement {}: {}", i + 1, e))),
+            }
+        }
+        tx.commit().await?;
+        Ok(affected)
+    }
+
+    pub async fn introspect(&self) -> Result<Catalog, DbError> {
+        let tbls = sqlx::query(
+            "SELECT name, type FROM sqlite_master \
+             WHERE type IN ('table','view') AND name NOT LIKE 'sqlite_%' \
+             ORDER BY name",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut tables: Vec<TableMeta> = Vec::with_capacity(tbls.len());
+        for t in &tbls {
+            let name: String = t.try_get("name")?;
+            let ttype: String = t.try_get("type")?;
+            let kind = if ttype == "view" { "view" } else { "table" }.to_string();
+            // PRAGMA arguments can't be bound — quote the identifier by hand.
+            let quoted = name.replace('"', "\"\"");
+
+            // Foreign keys: from-column -> referenced (table, column).
+            let fk_rows = sqlx::query(&format!("PRAGMA foreign_key_list(\"{quoted}\")"))
+                .fetch_all(&self.pool)
+                .await
+                .unwrap_or_default();
+            let mut fks: HashMap<String, ColumnRef> = HashMap::new();
+            for fr in &fk_rows {
+                let from: String = fr.try_get("from")?;
+                let ref_table: String = fr.try_get("table")?;
+                let ref_col: Option<String> = fr.try_get("to").ok();
+                fks.insert(
+                    from,
+                    ColumnRef {
+                        schema: "main".to_string(),
+                        table: ref_table,
+                        column: ref_col.unwrap_or_default(),
+                    },
+                );
+            }
+
+            let col_rows = sqlx::query(&format!("PRAGMA table_info(\"{quoted}\")"))
+                .fetch_all(&self.pool)
+                .await?;
+            let mut columns: Vec<ColumnMeta> = Vec::with_capacity(col_rows.len());
+            for cr in &col_rows {
+                let cname: String = cr.try_get("name")?;
+                let dtype: String = cr.try_get("type")?;
+                let notnull: i64 = cr.try_get("notnull")?;
+                let pk: i64 = cr.try_get("pk")?;
+                let references = fks.get(&cname).cloned();
+                columns.push(ColumnMeta {
+                    name: cname,
+                    data_type: dtype,
+                    nullable: notnull == 0,
+                    primary_key: pk > 0,
+                    references,
+                });
+            }
+
+            tables.push(TableMeta {
+                name,
+                kind,
+                columns,
+            });
+        }
+
+        Ok(Catalog {
+            schemas: vec![SchemaMeta {
+                name: "main".to_string(),
+                tables,
+            }],
+        })
+    }
+}
+
 // ---------------------------------------------------------------- engine dispatch
 
 #[derive(Clone)]
 pub enum DbClient {
     Postgres(PgClient),
     Mysql(MyClient),
+    Sqlite(SqliteClient),
 }
 
 impl DbClient {
@@ -759,15 +1023,17 @@ impl DbClient {
         match cfg.engine {
             Engine::Postgres => Ok(DbClient::Postgres(PgClient::connect(cfg).await?)),
             Engine::Mysql => Ok(DbClient::Mysql(MyClient::connect(cfg).await?)),
-            other => Err(DbError::Unsupported(format!(
-                "{other:?} adapter not implemented yet"
-            ))),
+            Engine::Sqlite => Ok(DbClient::Sqlite(SqliteClient::connect(cfg).await?)),
+            Engine::Mssql => Err(DbError::Unsupported(
+                "SQL Server adapter not implemented yet".into(),
+            )),
         }
     }
     pub async fn ping(&self) -> Result<(), DbError> {
         match self {
             DbClient::Postgres(c) => c.ping().await,
             DbClient::Mysql(c) => c.ping().await,
+            DbClient::Sqlite(c) => c.ping().await,
         }
     }
     pub async fn run_query(
@@ -780,36 +1046,42 @@ impl DbClient {
         match self {
             DbClient::Postgres(c) => c.run_query(sql, limit, active, token).await,
             DbClient::Mysql(c) => c.run_query(sql, limit, active, token).await,
+            DbClient::Sqlite(c) => c.run_query(sql, limit, active, token).await,
         }
     }
     pub async fn cancel(&self, id: i64) -> Result<bool, DbError> {
         match self {
             DbClient::Postgres(c) => c.cancel(id).await,
             DbClient::Mysql(c) => c.cancel(id).await,
+            DbClient::Sqlite(c) => c.cancel(id).await,
         }
     }
     pub async fn introspect(&self) -> Result<Catalog, DbError> {
         match self {
             DbClient::Postgres(c) => c.introspect().await,
             DbClient::Mysql(c) => c.introspect().await,
+            DbClient::Sqlite(c) => c.introspect().await,
         }
     }
     pub async fn exec_batch(&self, statements: &[String]) -> Result<u64, DbError> {
         match self {
             DbClient::Postgres(c) => c.exec_batch(statements).await,
             DbClient::Mysql(c) => c.exec_batch(statements).await,
+            DbClient::Sqlite(c) => c.exec_batch(statements).await,
         }
     }
     pub async fn list_databases(&self) -> Result<Vec<String>, DbError> {
         match self {
             DbClient::Postgres(c) => c.list_databases().await,
             DbClient::Mysql(c) => c.list_databases().await,
+            DbClient::Sqlite(c) => c.list_databases().await,
         }
     }
     pub async fn list_roles(&self) -> Result<Vec<String>, DbError> {
         match self {
             DbClient::Postgres(c) => c.list_roles().await,
             DbClient::Mysql(c) => c.list_roles().await,
+            DbClient::Sqlite(c) => c.list_roles().await,
         }
     }
 }
@@ -841,5 +1113,105 @@ mod tests {
         let v = serde_json::to_value(DbError::NotConnected("abc".into())).unwrap();
         assert_eq!(v["kind"], "notConnected");
         assert_eq!(v["message"], "abc");
+    }
+
+    // SQLite needs no server, so this drives the real adapter end-to-end.
+    #[tokio::test]
+    async fn sqlite_end_to_end() {
+        let path = std::env::temp_dir()
+            .join(format!("greenberry_sqlite_test_{}.db", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+
+        // Seed a database file (create_if_missing here; the adapter opens it read-as-is).
+        {
+            let opts = SqliteConnectOptions::new()
+                .filename(&path)
+                .create_if_missing(true);
+            let pool = SqlitePoolOptions::new()
+                .max_connections(1)
+                .connect_with(opts)
+                .await
+                .unwrap();
+            sqlx::query("CREATE TABLE authors (id INTEGER PRIMARY KEY, name TEXT NOT NULL)")
+                .execute(&pool)
+                .await
+                .unwrap();
+            sqlx::query(
+                "CREATE TABLE books (id INTEGER PRIMARY KEY, title TEXT, \
+                 author_id INTEGER REFERENCES authors(id))",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+            sqlx::query("INSERT INTO authors (id, name) VALUES (1, 'Ada'), (2, 'Alan')")
+                .execute(&pool)
+                .await
+                .unwrap();
+            sqlx::query("INSERT INTO books (id, title, author_id) VALUES (1, 'B1', 1), (2, NULL, 2)")
+                .execute(&pool)
+                .await
+                .unwrap();
+            pool.close().await;
+        }
+
+        let cfg = ConnectionConfig {
+            engine: Engine::Sqlite,
+            host: String::new(),
+            port: 0,
+            user: String::new(),
+            password: None,
+            database: path.to_string_lossy().to_string(),
+            ssl_mode: None,
+        };
+        let client = SqliteClient::connect(&cfg).await.expect("connect");
+        client.ping().await.expect("ping");
+
+        let active = ActiveQueries::default();
+
+        // Typed values: integer stays a number, text a string.
+        let res = client
+            .run_query("SELECT id, name FROM authors ORDER BY id", 1000, &active, "t1")
+            .await
+            .unwrap();
+        assert_eq!(res.columns.len(), 2);
+        assert_eq!(res.row_count, 2);
+        assert_eq!(res.rows[0][0], serde_json::json!(1));
+        assert_eq!(res.rows[0][1], serde_json::json!("Ada"));
+
+        // NULL round-trips as JSON null.
+        let res2 = client
+            .run_query("SELECT title FROM books WHERE id = 2", 1000, &active, "t2")
+            .await
+            .unwrap();
+        assert_eq!(res2.rows[0][0], serde_json::Value::Null);
+
+        // limit+1 truncation detection.
+        let res3 = client
+            .run_query("SELECT id FROM authors ORDER BY id", 1, &active, "t3")
+            .await
+            .unwrap();
+        assert!(res3.truncated);
+        assert_eq!(res3.row_count, 1);
+
+        // Introspection: primary key + foreign key.
+        let cat = client.introspect().await.unwrap();
+        let schema = &cat.schemas[0];
+        assert_eq!(schema.name, "main");
+        let books = schema.tables.iter().find(|t| t.name == "books").unwrap();
+        let author_id = books.columns.iter().find(|c| c.name == "author_id").unwrap();
+        let fk = author_id.references.as_ref().expect("FK detected");
+        assert_eq!(fk.table, "authors");
+        assert_eq!(fk.column, "id");
+        let authors = schema.tables.iter().find(|t| t.name == "authors").unwrap();
+        assert!(authors.columns.iter().find(|c| c.name == "id").unwrap().primary_key);
+
+        // Staged-edit batch commits in one transaction.
+        let n = client
+            .exec_batch(&["INSERT INTO authors (id, name) VALUES (3, 'Grace')".to_string()])
+            .await
+            .unwrap();
+        assert_eq!(n, 1);
+
+        let _ = std::fs::remove_file(&path);
     }
 }
