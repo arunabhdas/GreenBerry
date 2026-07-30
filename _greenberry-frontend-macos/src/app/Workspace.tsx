@@ -13,6 +13,8 @@ import { useShortcuts } from "../lib/shortcuts";
 import { useTheme } from "../ui/theme";
 import { useToast } from "../ui/Toast";
 import { Button } from "../ui/Button";
+import { BerryMark } from "../ui/BerryMark";
+import { BrandLogo } from "../ui/BrandLogo";
 import { TableView } from "./TableView";
 import { QueryView } from "./QueryView";
 import { DbPool, type DbEntry } from "./dbPool";
@@ -66,6 +68,9 @@ export function Workspace({
   // where new query tabs land: the last-browsed server + database
   const [activeTarget, setActiveTarget] = useState({ connId: conn.id, db: config.database });
   const savedConnections = useWorkspace((s) => s.connections);
+  // ids whose status dot is flashing red mid-disconnect (before settling gray)
+  const [disconnecting, setDisconnecting] = useState<Set<string>>(() => new Set());
+  const disconnectTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
 
   const poolsRef = useRef(new Map<string, DbPool>());
   const poolDeps = (cfg: ConnectionConfig) => ({
@@ -130,6 +135,14 @@ export function Workspace({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // clear pending disconnect flashes if the workspace unmounts
+  useEffect(() => {
+    const timers = disconnectTimers.current;
+    return () => {
+      for (const t of timers.values()) clearTimeout(t);
+    };
+  }, []);
+
   // --- S3.8: multi-server sessions ------------------------------------
   async function openServer(stored: StoredConnection) {
     if (poolsRef.current.has(stored.id)) return; // already open
@@ -149,17 +162,33 @@ export function Workspace({
         [stored.id]: { conn: stored, config: cfg, databases: dbs, roles: srvRoles, entries: pool.snapshot() },
       }));
       setActiveTarget({ connId: stored.id, db: cfg.database });
+      // reconnecting cancels any pending red→gray flash for this id
+      const t = disconnectTimers.current.get(stored.id);
+      if (t) {
+        clearTimeout(t);
+        disconnectTimers.current.delete(stored.id);
+      }
+      setDisconnecting((d) => {
+        if (!d.has(stored.id)) return d;
+        const n = new Set(d);
+        n.delete(stored.id);
+        return n;
+      });
       void restoreOpenQueries(stored.id);
     } catch (e) {
       notify(`Could not open “${stored.name}”: ${msg(e)}`, "error");
     }
   }
 
-  /** Close one server: drop its pools + tabs; persisted SQL rows remain. */
-  function closeServer(connId: string) {
+  /** Disconnect one server: close its pools, drop its tabs, and flash the
+   *  status dot red → gray. The user stays in the workspace — no navigation —
+   *  so they can reconnect this or another connection from the panel. Persisted
+   *  SQL rows remain. Persisted-query rows remain. */
+  function disconnectServer(connId: string) {
     const pool = poolsRef.current.get(connId);
+    if (!pool) return;
     poolsRef.current.delete(connId);
-    if (pool) void pool.disconnectAll();
+    void pool.disconnectAll();
     setTabs((ts) => {
       const next = ts.filter((t) => t.connId !== connId);
       if (!next.some((t) => t.id === activeId)) setActiveId(next[0]?.id ?? null);
@@ -174,13 +203,34 @@ export function Workspace({
       const other = Object.values(sessions).find((x) => x.conn.id !== connId);
       return other ? { connId: other.conn.id, db: other.config.database } : t;
     });
-    if (poolsRef.current.size === 0) onDisconnect();
+
+    // flash the connection's status dot red, then let it settle to gray
+    setDisconnecting((d) => new Set(d).add(connId));
+    const prev = disconnectTimers.current.get(connId);
+    if (prev) clearTimeout(prev);
+    disconnectTimers.current.set(
+      connId,
+      setTimeout(() => {
+        disconnectTimers.current.delete(connId);
+        setDisconnecting((d) => {
+          const n = new Set(d);
+          n.delete(connId);
+          return n;
+        });
+      }, 900),
+    );
+
+    // Only leave the workspace if there is nothing left to reconnect to.
+    if (poolsRef.current.size === 0 && savedConnections.length === 0) onDisconnect();
   }
 
-  function disconnectAll() {
-    for (const pool of poolsRef.current.values()) void pool.disconnectAll();
-    poolsRef.current.clear();
-    onDisconnect();
+  /** Top-right "Disconnect": close the connection currently in focus (or any
+   *  live one if focus has drifted), staying on this screen. */
+  function disconnectActive() {
+    const connId = poolsRef.current.has(activeTarget.connId)
+      ? activeTarget.connId
+      : poolsRef.current.keys().next().value;
+    if (connId) disconnectServer(connId);
   }
 
   // --- tabs ------------------------------------------------------------
@@ -301,7 +351,7 @@ export function Workspace({
   return (
     <div className="gb-ws">
       <header className="titlebar" data-tauri-drag-region>
-        <span className="brand">🫐 GreenBerry</span>
+        <span className="brand"><BerryMark size={16} /> GreenBerry</span>
         <span className="sub">{activeSession?.conn.name ?? conn.name}</span>
         <span style={{ marginLeft: 6 }}>
           <EnvBadge env={activeSession?.conn.env ?? conn.env} />
@@ -310,7 +360,7 @@ export function Workspace({
           <Button size="sm" variant="ghost" onClick={() => openQuery()}>+ Query</Button>
           <Button size="sm" variant="ghost" onClick={() => setPaletteOpen(true)}>⌘K</Button>
           <Button size="sm" variant="ghost" onClick={toggleTheme}>{theme === "dark" ? "☾" : "☀"}</Button>
-          <Button size="sm" variant="ghost" onClick={disconnectAll}>Disconnect</Button>
+          <Button size="sm" variant="ghost" onClick={disconnectActive}>Disconnect</Button>
         </span>
       </header>
 
@@ -332,6 +382,7 @@ export function Workspace({
                 <SavedConnectionList
                   connections={savedConnections}
                   activeIds={Object.keys(sessions)}
+                  disconnectingIds={Array.from(disconnecting)}
                   onConnect={(c) => void openServer(c)}
                   onEdit={setEditingConn}
                   onDelete={(c) => {
@@ -352,7 +403,7 @@ export function Workspace({
           servers={servers}
           onExpandDatabase={expandDatabase}
           onOpenTable={openTable}
-          onCloseServer={closeServer}
+          onCloseServer={disconnectServer}
         />
         <div className="gb-ws__main">
           {tabs.length > 0 && (
@@ -398,7 +449,7 @@ export function Workspace({
           {tabs.length === 0 && (
             <div className="gb-connect">
               <div className="gb-connect__card">
-                <div className="mark">GreenBerry</div>
+                <BrandLogo />
                 <p style={{ color: "var(--dim)" }}>
                   Pick a table from the sidebar, press <b>⌘K</b>, or <b>+ Query</b>.
                 </p>

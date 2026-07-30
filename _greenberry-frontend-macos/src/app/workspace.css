@@ -156,10 +156,25 @@
   overflow: auto;
   padding: 6px 8px;
 }
-.gb-connrow__live {
-  color: var(--good, #46a758);
-  margin-right: 4px;
+.gb-connrow__dot {
+  margin-right: 5px;
   font-size: 0.7rem;
+  line-height: 1;
+  color: var(--dim);
+  /* smooth the green -> red -> gray transition on connect/disconnect */
+  transition: color 220ms ease, opacity 220ms ease;
+}
+.gb-connrow__dot.is-live {
+  color: var(--good, #46a758);
+  opacity: 1;
+}
+.gb-connrow__dot.is-busy {
+  color: var(--danger, #e5484d);
+  opacity: 1;
+}
+.gb-connrow__dot.is-idle {
+  color: var(--dim);
+  opacity: 0.5;
 }
 
 /* keep-alive tab panes (S3.8): inactive panes stay mounted, just hidden */

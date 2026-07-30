@@ -12,3 +12,5 @@ export { Button, type ButtonProps, type ButtonVariant, type ButtonSize } from ".
 export { Tabs, type TabItem, type TabsProps } from "./Tabs";
 export { IconRail, type RailItem, type IconRailProps } from "./IconRail";
 export { Gallery } from "./Gallery";
+export { BerryMark } from "./BerryMark";
+export { BrandLogo } from "./BrandLogo";

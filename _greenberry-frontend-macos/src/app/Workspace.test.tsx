@@ -111,6 +111,45 @@ describe("Workspace shell (multi-db tree)", () => {
     expect(screen.getAllByText(/Local PG/).length).toBeGreaterThanOrEqual(2);
   });
 
+  it("Disconnect closes the active connection but stays on the workspace, flashing the dot red→gray (S3.8)", async () => {
+    const onDisconnect = vi.fn();
+    // a saved connection exists, so there is somewhere to reconnect and the
+    // workspace should NOT navigate back to the connect screen
+    workspace.update((s) => ({ ...s, connections: [conn] }));
+    render(
+      <ThemeProvider>
+        <ToastProvider>
+          <Workspace
+            conn={conn}
+            config={config}
+            initialConnectionId="c1"
+            initialCatalog={catalog}
+            databases={["d"]}
+            roles={["coder"]}
+            onDisconnect={onDisconnect}
+          />
+        </ToastProvider>
+      </ThemeProvider>,
+    );
+
+    // starts connected (green dot in the connections panel)
+    expect(screen.getByLabelText("connected")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("Disconnect"));
+
+    // does not navigate away, and the dot flips to red (disconnecting)
+    expect(onDisconnect).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("disconnecting")).toBeInTheDocument();
+    // still on the workspace: the welcome hero is shown
+    expect(screen.getByText(/Pick a table from the sidebar/)).toBeInTheDocument();
+
+    // after the flash window the dot settles to gray (disconnected)
+    await waitFor(() => expect(screen.getByLabelText("disconnected")).toBeInTheDocument(), {
+      timeout: 1500,
+    });
+    expect(onDisconnect).not.toHaveBeenCalled();
+  });
+
   it("opens a table tab when a sidebar table is clicked", () => {
     renderWs();
     fireEvent.click(screen.getByText("users"));

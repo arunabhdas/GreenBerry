@@ -13,20 +13,29 @@ export function SavedConnectionList({
   connections,
   busy,
   activeIds,
+  disconnectingIds,
   onConnect,
   onEdit,
   onDelete,
 }: {
   connections: StoredConnection[];
   busy?: boolean;
-  /** Connection ids currently open (shown with a live dot). */
+  /** Connection ids currently open (green status dot). */
   activeIds?: string[];
+  /** Ids mid-disconnect (red status dot, briefly, before settling to gray). */
+  disconnectingIds?: string[];
   onConnect: (c: StoredConnection) => void;
   onEdit: (c: StoredConnection) => void;
   onDelete: (c: StoredConnection) => void;
 }) {
   const { notify } = useToast();
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+
+  function dotState(id: string): { cls: string; label: string } {
+    if (activeIds?.includes(id)) return { cls: "is-live", label: "connected" };
+    if (disconnectingIds?.includes(id)) return { cls: "is-busy", label: "disconnecting" };
+    return { cls: "is-idle", label: "disconnected" };
+  }
 
   function copyUrl(c: StoredConnection) {
     navigator.clipboard?.writeText(buildConnectionUrl(c.config)).catch(() => {});
@@ -49,7 +58,10 @@ export function SavedConnectionList({
             aria-label={`connect ${c.name}`}
           >
             <span className="gb-connrow__name">
-              {activeIds?.includes(c.id) && <span className="gb-connrow__live">●</span>}
+              {(() => {
+                const s = dotState(c.id);
+                return <span className={`gb-connrow__dot ${s.cls}`} title={s.label} aria-label={s.label}>●</span>;
+              })()}
               {c.name} <EnvBadge env={c.env} />
             </span>
             <span className="gb-connrow__url">

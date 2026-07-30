@@ -5,6 +5,8 @@ import { workspace, useWorkspace, type StoredConnection } from "../lib/workspace
 import { ConnectionModal } from "../features/connections/ConnectionModal";
 import { SavedConnectionList } from "../features/connections/SavedList";
 import { Button } from "../ui/Button";
+import { BerryMark } from "../ui/BerryMark";
+import { BrandLogo } from "../ui/BrandLogo";
 import { useTheme } from "../ui/theme";
 import { useToast } from "../ui/Toast";
 
@@ -88,7 +90,7 @@ export function ConnectScreen({ onConnected }: { onConnected: (s: Session) => vo
   return (
     <div className="app">
       <header className="titlebar" data-tauri-drag-region>
-        <span className="brand">🫐 GreenBerry</span>
+        <span className="brand"><BerryMark size={16} /> GreenBerry</span>
         <span className="sub">Desktop</span>
         <Button size="sm" variant="ghost" style={{ marginLeft: "auto" }} onClick={toggleTheme} aria-label="toggle theme">
           {theme === "dark" ? "☾" : "☀"}
@@ -97,7 +99,7 @@ export function ConnectScreen({ onConnected }: { onConnected: (s: Session) => vo
 
       <div className="gb-connect">
         <div className="gb-connect__card">
-          <div className="mark">GreenBerry</div>
+          <BrandLogo />
           <p style={{ color: "var(--dim)", marginTop: 8 }}>
             {busy ? "connecting…" : "Connect to a database to get started."}
           </p>

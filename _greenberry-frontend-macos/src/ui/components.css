@@ -39,13 +39,12 @@
   font-size: 0.92rem;
 }
 .gb-btn--primary {
-  background: var(--indigo);
-  border-color: var(--indigo);
+  background: linear-gradient(180deg, var(--brand), var(--brand-strong));
+  border-color: var(--brand-strong);
   color: var(--on-accent);
 }
 .gb-btn--primary:hover {
-  filter: brightness(1.08);
-  background: var(--indigo);
+  filter: brightness(1.06);
 }
 .gb-btn--danger {
   background: var(--danger);

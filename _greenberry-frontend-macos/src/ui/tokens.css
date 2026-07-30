@@ -13,6 +13,8 @@
   --danger: #f04747;
   --good: #35c37d;
   --warn: #ffb000;
+  --brand: #18a54d;
+  --brand-strong: #0c8043;
   --selection: rgba(91, 108, 240, 0.35);
   --on-accent: #ffffff;
   color-scheme: dark;
@@ -31,6 +33,8 @@
   --danger: #dc2626;
   --good: #16a34a;
   --warn: #b45309;
+  --brand: #12924a;
+  --brand-strong: #0b7a3b;
   --selection: rgba(79, 70, 229, 0.22);
   --on-accent: #ffffff;
   color-scheme: light;
