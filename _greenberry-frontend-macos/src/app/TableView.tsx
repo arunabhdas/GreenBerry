@@ -5,6 +5,7 @@ import { StagedChanges } from "../features/grid/staged";
 import { DataGrid } from "../features/grid/DataGrid";
 import { toCsv } from "../features/grid/exportData";
 import { Button } from "../ui/Button";
+import { ProgressBar } from "../ui/Progress";
 import { useToast } from "../ui/Toast";
 
 const PAGE = 200;
@@ -165,12 +166,16 @@ export function TableView({
         </Button>
       </div>
 
-      <div ref={gridRef} style={{ flex: 1, minHeight: 0 }}>
-        {loading ? (
-          <div style={{ padding: 16, color: "var(--dim)" }}>loading…</div>
-        ) : (
-          <DataGrid columns={cols} rows={rows} height={Math.max(120, gridH - 30)} onCellClick={beginEdit} />
-        )}
+      <div ref={gridRef} style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+        {/* keep the previous rows visible while the next page loads — the
+            sweep bar is the read-in-progress signal, not a content flash */}
+        {loading && <ProgressBar label={`loading ${table}`} />}
+        <DataGrid
+          columns={cols}
+          rows={rows}
+          height={Math.max(120, gridH - 30 - (loading ? 2 : 0))}
+          onCellClick={beginEdit}
+        />
       </div>
 
       {editing && (

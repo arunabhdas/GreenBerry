@@ -91,7 +91,6 @@ export function ConnectScreen({ onConnected }: { onConnected: (s: Session) => vo
     <div className="app">
       <header className="titlebar" data-tauri-drag-region>
         <span className="brand"><BerryMark size={16} /> GreenBerry</span>
-        <span className="sub">Desktop</span>
         <Button size="sm" variant="ghost" style={{ marginLeft: "auto" }} onClick={toggleTheme} aria-label="toggle theme">
           {theme === "dark" ? "☾" : "☀"}
         </Button>

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { db, type QueryResult } from "../lib/db";
 import { SqlEditor } from "../features/editor/SqlEditor";
 import { DataGrid } from "../features/grid/DataGrid";
+import { ProgressBar } from "../ui/Progress";
 import { useToast } from "../ui/Toast";
 import { workspace } from "../lib/workspace";
 
@@ -104,6 +105,7 @@ export function QueryView({
         onRun={run}
         running={running}
       />
+      {running && <ProgressBar label="running query" />}
       <div
         ref={wrapRef}
         style={{ flex: 1, minHeight: 0, borderTop: "1px solid var(--border)" }}

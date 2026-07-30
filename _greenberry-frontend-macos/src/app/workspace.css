@@ -635,3 +635,29 @@
   font-size: 0.8rem;
   white-space: pre-wrap;
 }
+
+/* indeterminate read-progress bar (2px sweep) */
+.gb-progress {
+  height: 2px;
+  flex: 0 0 2px;
+  overflow: hidden;
+  background: var(--border);
+}
+.gb-progress__bar {
+  width: 40%;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--indigo);
+  animation: gb-progress-sweep 1.1s ease-in-out infinite;
+}
+@keyframes gb-progress-sweep {
+  from { transform: translateX(-110%); }
+  to { transform: translateX(360%); }
+}
+.gb-pane-connecting {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  color: var(--dim);
+}

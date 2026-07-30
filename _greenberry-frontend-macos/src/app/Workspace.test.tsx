@@ -3,11 +3,23 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // rows the fake app-db returns for store_list_open_queries (S3.7)
 let persistedQueries: Array<{ id: string; connId: string; db: string; sql: string }> = [];
 
+// when set, db_query calls resolve only after this gate (progress-bar tests)
+let queryGate: Promise<void> | null = null;
+
 const invoke = vi.fn((cmd: string, _args?: unknown) => {
   if (cmd === "store_list_open_queries") return Promise.resolve(persistedQueries);
   if (cmd.startsWith("store_")) return Promise.resolve(undefined);
   if (cmd === "db_databases" || cmd === "db_roles") return Promise.resolve([]);
   if (cmd === "db_connect") return Promise.resolve("cid-2");
+  if (cmd === "db_query" && queryGate)
+    return queryGate.then(() => ({
+      columns: [{ name: "id", dataType: "int4" }],
+      rows: [[1]],
+      rowCount: 1,
+      rowsAffected: 0,
+      elapsedMs: 1,
+      truncated: false,
+    }));
   if (cmd === "db_introspect")
     return Promise.resolve({
       schemas: [
@@ -95,6 +107,7 @@ function renderWs() {
 
 beforeEach(() => {
   persistedQueries = [];
+  queryGate = null;
   invoke.mockClear();
   workspace.update((s) => ({ ...s, connections: [] }));
 });
@@ -227,13 +240,59 @@ describe("Workspace shell (multi-db tree)", () => {
     expect(screen.queryByLabelText("sql editor")).toBeNull();
   });
 
-  it("restores persisted query tabs on mount (S3.7)", async () => {
+  it("restores persisted query tabs on mount AND activates them — no blank pane (S3.7)", async () => {
     persistedQueries = [{ id: "q:old", connId: "c", db: "d", sql: "SELECT 99" }];
     renderWs();
-    const tab = await screen.findByText("Query"); // restored tab appears
-    fireEvent.click(tab);
+    await screen.findByText("Query"); // restored tab appears
+    // regression: the restored tab must be active immediately, without a click
+    expect(screen.getByLabelText("sql editor")).toBeVisible();
     expect(screen.getByLabelText("sql editor")).toHaveValue("SELECT 99");
     expect((screen.getByLabelText("query database") as HTMLSelectElement).value).toBe("d");
+  });
+
+  it("clicking a sidebar table works from the restored-tab state (user repro)", async () => {
+    persistedQueries = [{ id: "q:old", connId: "c", db: "d", sql: "SELECT 99" }];
+    renderWs();
+    await screen.findByText("Query");
+    fireEvent.click(screen.getByText("users"));
+    expect(screen.getByText("public.users")).toBeVisible();
+    expect(screen.getByText("↻ Refresh")).toBeVisible();
+  });
+
+  it("first click on a table works after Disconnect → reconnect via panel (user repro)", async () => {
+    workspace.update((s) => ({ ...s, connections: [conn] })); // panel tile exists
+    persistedQueries = [{ id: "q:old", connId: "c", db: "d", sql: "SELECT 99" }];
+    renderWs();
+    await screen.findByText("Query"); // restored + active
+
+    fireEvent.click(screen.getByText("Disconnect"));
+    await waitFor(() => expect(screen.queryByText("users")).toBeNull()); // tree gone
+
+    fireEvent.click(screen.getByLabelText("connect Local PG")); // reconnect via tile
+    // tree repopulated (reconnect introspect returns the "pets" catalog mock)
+    await screen.findByText("pets");
+
+    fireEvent.click(screen.getByText("pets")); // FIRST click must open the table
+    expect(screen.getByText("public.pets")).toBeVisible();
+    expect(screen.getByText("↻ Refresh")).toBeVisible();
+  });
+
+  it("shows a progress sweep while a query read is in flight", async () => {
+    let release!: () => void;
+    queryGate = new Promise<void>((r) => {
+      release = r;
+    });
+    renderWs();
+    fireEvent.click(screen.getByRole("button", { name: "+ Query" }));
+    fireEvent.click(screen.getByLabelText("run"));
+    expect(
+      await screen.findByRole("progressbar", { name: "running query" }),
+    ).toBeInTheDocument();
+    release();
+    await waitFor(() =>
+      expect(screen.queryByRole("progressbar", { name: "running query" })).toBeNull(),
+    );
+    expect(screen.getAllByText("1").length).toBeGreaterThan(0); // results landed
   });
 
   it("query results survive switching tabs without re-running (S3.8)", async () => {

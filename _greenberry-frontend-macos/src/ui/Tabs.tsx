@@ -1,3 +1,5 @@
+import { useEffect, useRef } from "react";
+
 export interface TabItem {
   id: string;
   title: string;
@@ -12,8 +14,24 @@ export interface TabsProps {
 }
 
 export function Tabs({ items, activeId, onSelect, onClose }: TabsProps) {
+  const barRef = useRef<HTMLDivElement>(null);
+
+  // keep the active tab visible once tabs overflow into the horizontal scroll
+  useEffect(() => {
+    const el = barRef.current?.querySelector('[aria-selected="true"]');
+    el?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+  }, [activeId, items.length]);
+
   return (
-    <div className="gb-tabs" role="tablist">
+    <div
+      className="gb-tabs"
+      role="tablist"
+      ref={barRef}
+      // a plain mouse wheel only emits deltaY — translate it to the bar's axis
+      onWheel={(e) => {
+        if (e.deltaY && !e.deltaX) e.currentTarget.scrollLeft += e.deltaY;
+      }}
+    >
       {items.map((t) => {
         const active = t.id === activeId;
         return (

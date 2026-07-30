@@ -13,6 +13,7 @@ import { useShortcuts } from "../lib/shortcuts";
 import { useTheme } from "../ui/theme";
 import { useToast } from "../ui/Toast";
 import { Button } from "../ui/Button";
+import { ProgressBar } from "../ui/Progress";
 import { BerryMark } from "../ui/BerryMark";
 import { BrandLogo } from "../ui/BrandLogo";
 import { TableView } from "./TableView";
@@ -128,6 +129,9 @@ export function Workspace({
         .map((r) => ({ id: r.id, kind: "query" as const, title: "Query", connId, db: r.db, sql: r.sql }));
       return [...ts, ...restored];
     });
+    // A tab bar with no active tab renders an all-blank pane area — always
+    // land on a restored tab unless the user already has one focused.
+    setActiveId((cur) => cur ?? rows[0]?.id ?? null);
   }
 
   useEffect(() => {
@@ -189,11 +193,10 @@ export function Workspace({
     if (!pool) return;
     poolsRef.current.delete(connId);
     void pool.disconnectAll();
-    setTabs((ts) => {
-      const next = ts.filter((t) => t.connId !== connId);
-      if (!next.some((t) => t.id === activeId)) setActiveId(next[0]?.id ?? null);
-      return next;
-    });
+    // pure updater discipline: derive next tabs first, then set both states
+    const nextTabs = tabsRef.current.filter((t) => t.connId !== connId);
+    setTabs(nextTabs);
+    if (!nextTabs.some((t) => t.id === activeId)) setActiveId(nextTabs[0]?.id ?? null);
     setSessions((s) => {
       const { [connId]: _closed, ...rest } = s;
       return rest;
@@ -259,12 +262,13 @@ export function Workspace({
       saveTimers.current.delete(id);
       void openQueries.remove(id);
     }
-    setTabs((ts) => {
-      const idx = ts.findIndex((t) => t.id === id);
-      const next = ts.filter((t) => t.id !== id);
-      if (activeId === id) setActiveId(next[idx]?.id ?? next[idx - 1]?.id ?? null);
-      return next;
-    });
+    // computed OUTSIDE the updater: React may replay updaters, so they must
+    // stay pure — a setActiveId inside one can re-fire at the wrong moment
+    const ts = tabsRef.current;
+    const idx = ts.findIndex((t) => t.id === id);
+    const next = ts.filter((t) => t.id !== id);
+    setTabs(next);
+    if (activeId === id) setActiveId(next[idx]?.id ?? next[idx - 1]?.id ?? null);
   }
 
   function expandDatabase(connId: string, database: string) {
@@ -432,7 +436,10 @@ export function Workspace({
                     onOpenQuery={(sql) => openQuery(sql, { connId: t.connId, db: t.db })}
                   />
                 ) : (
-                  <div style={{ padding: 16, color: "var(--dim)" }}>connecting…</div>
+                  <div className="gb-pane-connecting">
+                    <ProgressBar label={`connecting to ${t.db}`} />
+                    <span>connecting to {t.db}…</span>
+                  </div>
                 )
               ) : (
                 <QueryView
@@ -446,7 +453,8 @@ export function Workspace({
               )}
             </div>
           ))}
-          {tabs.length === 0 && (
+          {/* shown whenever no pane is active — a blank main area must be impossible */}
+          {!tabs.some((t) => t.id === activeId) && (
             <div className="gb-connect">
               <div className="gb-connect__card">
                 <BrandLogo />

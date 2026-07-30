@@ -66,6 +66,14 @@
   gap: 2px;
   background: var(--panel);
   border-bottom: 1px solid var(--border);
+  /* overflowing tabs scroll horizontally (active tab auto-scrolls into view);
+     the scrollbar itself stays hidden — wheel/trackpad still scroll */
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+.gb-tabs::-webkit-scrollbar {
+  display: none;
 }
 .gb-tab {
   display: inline-flex;
@@ -77,13 +85,18 @@
   border-bottom: 2px solid transparent;
   cursor: pointer;
   max-width: 220px;
+  flex: 0 0 auto; /* don't shrink — overflow into the scroll instead */
 }
 .gb-tab:hover {
-  background: var(--hover);
+  background-color: var(--hover); /* -color: keep the active underline image */
 }
 .gb-tab.is-active {
   color: var(--text);
-  border-bottom-color: var(--pink);
+  /* underline in the wordmark's green gradient (borders can't hold gradients) */
+  background-image: linear-gradient(90deg, #3dd680 0%, #17a64c 55%, #0b7a3b 100%);
+  background-repeat: no-repeat;
+  background-size: 100% 2px;
+  background-position: bottom;
 }
 .gb-tab__title {
   overflow: hidden;

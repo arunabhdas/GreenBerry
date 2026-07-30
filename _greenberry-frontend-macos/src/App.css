@@ -1,6 +1,6 @@
 /* App shell styles — consumes design tokens from src/ui/tokens.css. */
 :root {
-  --titlebar-h: 40px;
+  --titlebar-h: 32px;
 }
 
 * {
@@ -34,7 +34,10 @@ body {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 0 var(--space-3) 0 82px; /* clear macOS traffic lights */
+  /* 32px tall so the bar's centerline (16px) coincides with the native
+     traffic lights' centerline — content is then truly centered in the bar
+     AND on the lights' line, with no padding bias. */
+  padding: 0 var(--space-3) 0 82px;
   border-bottom: 1px solid var(--border);
   background: var(--panel);
   user-select: none;
@@ -63,6 +66,9 @@ body {
 .titlebar .sub {
   color: var(--dim);
   font-size: 0.85rem;
+  /* optical baseline alignment with the larger bold brand text */
+  position: relative;
+  top: 1px;
 }
 
 .shell {

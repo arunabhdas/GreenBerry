@@ -255,6 +255,10 @@ function TableNode({
         </button>
         <button
           className="gb-tree__table"
+          // mousedown fast-path: macOS swallows a click that lands while the
+          // list is still momentum-scrolling; opening is idempotent, so firing
+          // on both mousedown and click is safe (click keeps keyboard support)
+          onMouseDown={() => onOpenTable?.(schema, node.label)}
           onClick={() => onOpenTable?.(schema, node.label)}
         >
           {node.label}
